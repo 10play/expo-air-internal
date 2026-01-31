@@ -12,7 +12,7 @@ public class ExpoFlowModule: Module {
       return bundled
     }
     // Otherwise, fall back to the widget's dedicated Metro dev server on port 8082
-    return URL(string: "http://localhost:8082/index.bundle?platform=ios&dev=false&minify=false")
+    return URL(string: "http://localhost:8082/index.bundle?platform=ios&dev=true&minify=false")
   }
 
   private func wireManagerEvents() {
