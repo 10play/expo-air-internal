@@ -1,20 +1,20 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet } from "react-native";
 
 interface BubbleContentProps {
   size?: number;
   color?: string;
+  expanded?: boolean;
 }
 
 export function BubbleContent({
   size = 60,
   color = "#007AFF",
+  expanded = false,
 }: BubbleContentProps) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!expanded) {
     return (
-      <TouchableOpacity
+      <View
         style={[
           styles.collapsed,
           {
@@ -24,11 +24,9 @@ export function BubbleContent({
             backgroundColor: color,
           },
         ]}
-        onPress={() => setExpanded(true)}
-        activeOpacity={0.8}
       >
         <Text style={styles.collapsedText}>F</Text>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -36,12 +34,9 @@ export function BubbleContent({
     <View style={[styles.expanded, { backgroundColor: color }]}>
       <View style={styles.header}>
         <Text style={styles.title}>Expo Flow</Text>
-        <TouchableOpacity onPress={() => setExpanded(false)}>
-          <Text style={styles.closeButton}>✕</Text>
-        </TouchableOpacity>
       </View>
       <View style={styles.body}>
-        <Text style={styles.bodyText}>Dev Tool</Text>
+        <Text style={styles.bodyText}>Dev Tools</Text>
       </View>
     </View>
   );
@@ -71,11 +66,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   title: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  closeButton: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "600",

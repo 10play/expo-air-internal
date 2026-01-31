@@ -1,4 +1,5 @@
 import UIKit
+import React
 
 // MARK: - FloatingBubbleWindow
 
@@ -91,6 +92,7 @@ class FloatingBubbleViewController: UIViewController {
     func expand() {
         guard !isExpanded else { return }
         isExpanded = true
+        updateSurfaceProps()
         animateToExpanded()
         onExpand?()
     }
@@ -98,8 +100,18 @@ class FloatingBubbleViewController: UIViewController {
     func collapse() {
         guard isExpanded else { return }
         isExpanded = false
+        updateSurfaceProps()
         animateToCollapsed()
         onCollapse?()
+    }
+
+    private func updateSurfaceProps() {
+        guard let surfaceView = reactSurfaceView as? RCTSurfaceHostingProxyRootView else { return }
+        surfaceView.appProperties = [
+            "size": bubbleSize,
+            "color": bubbleColor,
+            "expanded": isExpanded,
+        ]
     }
 
     private func animateToExpanded() {
@@ -239,6 +251,7 @@ class FloatingBubbleManager {
                     initialProperties: [
                         "size": size,
                         "color": color,
+                        "expanded": false,
                     ]
                 ) {
                     vc.setSurfaceView(surfaceView)
