@@ -214,7 +214,13 @@ class FloatingBubbleManager {
 
     func show(size: CGFloat, color: String, bundleURL: URL?) {
         DispatchQueue.main.async {
-            // Inline hide to avoid re-dispatching to main
+            // If already showing, just make sure it's visible and return
+            if let existingWindow = self.bubbleWindow, self.bubbleVC != nil {
+                existingWindow.isHidden = false
+                return
+            }
+
+            // Tear down any partial state
             self.bubbleWindow?.isHidden = true
             self.bubbleWindow?.rootViewController = nil
             self.bubbleWindow = nil

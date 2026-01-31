@@ -6,10 +6,43 @@
 #import <React/RCTHermesInstanceFactory.h>
 #import <React/CoreModulesPlugins.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
+#import <ReactCommon/RCTHost.h>
 #import <react/nativemodule/defaults/DefaultTurboModules.h>
+#import <objc/runtime.h>
 
-// Need RCTHost forward declaration for the delegate
-@class RCTHost;
+// ---------------------------------------------------------------------------
+// Swizzle RCTHost's didReceiveReloadCommand so the widget host can opt out
+// of the global reload broadcast that fires when the main app reloads.
+// ---------------------------------------------------------------------------
+
+static NSHashTable<RCTHost *> *_widgetHosts = nil;
+
+static void swizzleReloadOnce(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        _widgetHosts = [NSHashTable weakObjectsHashTable];
+
+        Class cls = [RCTHost class];
+        SEL sel = @selector(didReceiveReloadCommand);
+        Method method = class_getInstanceMethod(cls, sel);
+        if (!method) return;
+
+        typedef void (*OrigIMP)(id, SEL);
+        OrigIMP origIMP = (OrigIMP)method_getImplementation(method);
+
+        IMP newIMP = imp_implementationWithBlock(^(id self_) {
+            if ([_widgetHosts containsObject:self_]) {
+                NSLog(@"[WidgetRuntime] Ignoring global reload command for widget host");
+                return;
+            }
+            origIMP(self_, sel);
+        });
+
+        method_setImplementation(method, newIMP);
+    });
+}
+
+// ---------------------------------------------------------------------------
 
 @interface WidgetRuntime () <RCTHostDelegate, RCTTurboModuleManagerDelegate, RCTJSRuntimeConfiguratorProtocol>
 @property (nonatomic, strong) NSURL *bundleURL;
@@ -32,6 +65,9 @@
 
     NSLog(@"[WidgetRuntime] Starting with bundle URL: %@", _bundleURL);
 
+    // Swizzle before the factory creates the RCTHost
+    swizzleReloadOnce();
+
     _dependencyProvider = [[RCTAppDependencyProvider alloc] init];
 
     NSURL *url = _bundleURL;
@@ -52,6 +88,13 @@
     UIView *view = [_viewFactory viewWithModuleName:moduleName
                                   initialProperties:properties ?: @{}];
     view.backgroundColor = [UIColor clearColor];
+
+    // Mark the widget's RCTHost so it ignores global reload commands
+    RCTHost *host = _viewFactory.reactHost;
+    if (host) {
+        [_widgetHosts addObject:host];
+    }
+
     return view;
 }
 
