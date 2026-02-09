@@ -412,15 +412,18 @@ export class PromptServer {
         stdio: ["pipe", "pipe", "pipe"],
       }).trim();
 
+      // Get current branch name before switching (to tag the stash)
+      const currentBranchBeforeCreate = this.getBranchName();
+
       if (status) {
         try {
-          execFileSync("git", ["stash", "push", "-u", "-m", "expo-air-auto-stash"], {
+          execFileSync("git", ["stash", "push", "-u", "-m", `expo-air-auto-stash:${currentBranchBeforeCreate}`], {
             cwd: this.projectRoot,
             encoding: "utf-8",
             stdio: ["pipe", "pipe", "pipe"],
           });
           didStash = true;
-          this.log("Auto-stashed uncommitted changes", "info");
+          this.log(`Auto-stashed uncommitted changes for branch ${currentBranchBeforeCreate}`, "info");
         } catch (stashError) {
           const msg = stashError instanceof Error ? stashError.message : String(stashError);
           this.sendToClient(ws, {
