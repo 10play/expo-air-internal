@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
+  Animated,
+  Easing,
 } from "react-native";
 import type { BranchInfo } from "../services/websocket";
 import { SPACING, LAYOUT, COLORS, TYPOGRAPHY } from "../constants/design";
@@ -16,6 +18,7 @@ const HEADER_HEIGHT = 49;
 interface BranchSwitcherProps {
   branches: BranchInfo[];
   currentBranch: string;
+  loading?: boolean;
   onSelect: (branchName: string) => void;
   onCreate: (branchName: string) => void;
   onClose: () => void;
@@ -25,6 +28,7 @@ interface BranchSwitcherProps {
 export function BranchSwitcher({
   branches,
   currentBranch,
+  loading,
   onSelect,
   onCreate,
   onClose,
@@ -44,51 +48,63 @@ export function BranchSwitcher({
 
   return (
     <View style={styles.overlay}>
-      <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
+      <TouchableOpacity
+        style={styles.backdrop}
+        onPress={onClose}
+        activeOpacity={1}
+      />
       <View style={styles.dropdown}>
         {error && (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorText} numberOfLines={2}>{error}</Text>
+            <Text style={styles.errorText} numberOfLines={2}>
+              {error}
+            </Text>
           </View>
         )}
-        <ScrollView style={styles.branchList} bounces={false}>
-          {branches.map((branch, index) => (
-            <TouchableOpacity
-              key={branch.name}
-              style={[
-                styles.branchItem,
-                branch.isCurrent && styles.branchItemCurrent,
-                index === 0 && styles.branchItemFirst,
-              ]}
-              onPress={() => {
-                if (!branch.isCurrent) {
-                  onSelect(branch.name);
-                }
-              }}
-              activeOpacity={branch.isCurrent ? 1 : 0.6}
-            >
-              <View style={styles.branchInfo}>
-                <Text
-                  style={[
-                    styles.branchName,
-                    branch.isCurrent && styles.branchNameCurrent,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {branch.name}
-                </Text>
-                {branch.prNumber && (
-                  <View style={styles.prBadge}>
-                    <Text style={styles.prBadgeText}>#{branch.prNumber}</Text>
-                  </View>
+        {loading && branches.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <LoadingDots />
+          </View>
+        ) : (
+          <ScrollView style={styles.branchList} bounces={false}>
+            {branches.map((branch, index) => (
+              <TouchableOpacity
+                key={branch.name}
+                style={[
+                  styles.branchItem,
+                  branch.isCurrent && styles.branchItemCurrent,
+                  index === 0 && styles.branchItemFirst,
+                ]}
+                onPress={() => {
+                  if (!branch.isCurrent) {
+                    onSelect(branch.name);
+                  }
+                }}
+                activeOpacity={branch.isCurrent ? 1 : 0.6}
+              >
+                <View style={styles.branchInfo}>
+                  <Text
+                    style={[
+                      styles.branchName,
+                      branch.isCurrent && styles.branchNameCurrent,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {branch.name}
+                  </Text>
+                  {branch.prNumber && (
+                    <View style={styles.prBadge}>
+                      <Text style={styles.prBadgeText}>#{branch.prNumber}</Text>
+                    </View>
+                  )}
+                </View>
+                {branch.isCurrent && (
+                  <Text style={styles.currentIndicator}>✓</Text>
                 )}
-              </View>
-              {branch.isCurrent && (
-                <Text style={styles.currentIndicator}>✓</Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         <View style={styles.createSection}>
           {showCreateInput ? (
@@ -121,11 +137,59 @@ export function BranchSwitcher({
               style={styles.createButton}
               onPress={() => setShowCreateInput(true)}
             >
-              <Text style={styles.createButtonText}>+ New branch from main</Text>
+              <Text style={styles.createButtonText}>
+                + New branch from main
+              </Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
+    </View>
+  );
+}
+
+function LoadingDots() {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animate = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, {
+            toValue: 1,
+            duration: 300,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0.3,
+            duration: 300,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+    const a1 = animate(dot1, 0);
+    const a2 = animate(dot2, 150);
+    const a3 = animate(dot3, 300);
+    a1.start();
+    a2.start();
+    a3.start();
+    return () => {
+      a1.stop();
+      a2.stop();
+      a3.stop();
+    };
+  }, [dot1, dot2, dot3]);
+
+  return (
+    <View style={styles.loadingDots}>
+      {[dot1, dot2, dot3].map((dot, i) => (
+        <Animated.View key={i} style={[styles.loadingDot, { opacity: dot }]} />
+      ))}
     </View>
   );
 }
@@ -150,6 +214,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
     overflow: "hidden",
+  },
+  loadingContainer: {
+    paddingVertical: SPACING.XL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingDots: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  loadingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.5)",
   },
   branchList: {
     maxHeight: 300,
