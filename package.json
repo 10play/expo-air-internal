@@ -1,6 +1,6 @@
 {
   "name": "@10play/expo-air",
-  "version": "0.7.1",
+  "version": "0.9.0",
   "description": "Vibe Coding for React-Native",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -49,7 +49,8 @@
     "open:ios": "xed example/ios",
     "open:android": "open -a \"Android Studio\" example/android",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "setup": "npm install && cd widget && npm install && cd ../example && npm install"
   },
   "keywords": [
     "react-native",
