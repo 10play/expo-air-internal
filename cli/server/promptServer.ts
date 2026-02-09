@@ -280,16 +280,19 @@ export class PromptServer {
         stdio: ["pipe", "pipe", "pipe"],
       }).trim();
 
+      // Get current branch name before switching (to tag the stash)
+      const currentBranchBeforeSwitch = this.getBranchName();
+
       if (status) {
-        // Auto-stash (including untracked) before switching
+        // Auto-stash (including untracked) before switching - tag with current branch name
         try {
-          execFileSync("git", ["stash", "push", "-u", "-m", "expo-air-auto-stash"], {
+          execFileSync("git", ["stash", "push", "-u", "-m", `expo-air-auto-stash:${currentBranchBeforeSwitch}`], {
             cwd: this.projectRoot,
             encoding: "utf-8",
             stdio: ["pipe", "pipe", "pipe"],
           });
           didStash = true;
-          this.log("Auto-stashed uncommitted changes", "info");
+          this.log(`Auto-stashed uncommitted changes for branch ${currentBranchBeforeSwitch}`, "info");
         } catch (stashError) {
           const msg = stashError instanceof Error ? stashError.message : String(stashError);
           this.sendToClient(ws, {
@@ -311,7 +314,7 @@ export class PromptServer {
         stdio: ["pipe", "pipe", "pipe"],
       });
 
-      // Auto-pop stash if there's an expo-air-auto-stash entry for this branch
+      // Auto-pop stash only if there's one specifically for this target branch
       try {
         const stashList = execFileSync("git", ["stash", "list"], {
           cwd: this.projectRoot,
@@ -319,8 +322,9 @@ export class PromptServer {
           stdio: ["pipe", "pipe", "pipe"],
         });
         const stashLines = stashList.split("\n");
+        // Look for stash tagged with the target branch name
         const autoStashIndex = stashLines.findIndex((line) =>
-          line.includes("expo-air-auto-stash")
+          line.includes(`expo-air-auto-stash:${branchName}`)
         );
         if (autoStashIndex !== -1) {
           try {
@@ -329,7 +333,7 @@ export class PromptServer {
               encoding: "utf-8",
               stdio: ["pipe", "pipe", "pipe"],
             });
-            this.log("Restored auto-stashed changes", "info");
+            this.log(`Restored auto-stashed changes for branch ${branchName}`, "info");
           } catch {
             this.log("Warning: failed to pop auto-stash (possible merge conflict). Stash preserved.", "warn");
             // Reset the conflicted working directory to clean state (stash is already preserved)
