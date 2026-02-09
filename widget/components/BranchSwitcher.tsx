@@ -67,11 +67,6 @@ export function BranchSwitcher({
           </View>
         ) : (
           <ScrollView style={styles.branchList} bounces={false}>
-            {loading && (
-              <View style={styles.loadingBar}>
-                <LoadingDots />
-              </View>
-            )}
             {branches.map((branch, index) => {
               const isCurrent = branch.name === currentBranch;
               return (
@@ -80,7 +75,7 @@ export function BranchSwitcher({
                   style={[
                     styles.branchItem,
                     isCurrent && styles.branchItemCurrent,
-                    index === 0 && !loading && styles.branchItemFirst,
+                    index === 0 && styles.branchItemFirst,
                   ]}
                   onPress={() => {
                     if (!isCurrent) {
@@ -229,12 +224,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.XL,
     alignItems: "center",
     justifyContent: "center",
-  },
-  loadingBar: {
-    paddingVertical: SPACING.SM,
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(255,255,255,0.06)",
   },
   loadingDots: {
     flexDirection: "row",
