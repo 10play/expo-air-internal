@@ -10,7 +10,6 @@ import {
   NativeModules,
   NativeEventEmitter,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import { SPACING, LAYOUT, COLORS, TYPOGRAPHY, SIZES } from "../constants/design";
 import type { ImageAttachment } from "../services/websocket";
 
@@ -74,15 +73,13 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(({
     }
 
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
-        allowsMultipleSelection: true,
-        selectionLimit: MAX_IMAGES - images.length,
-        quality: 0.7,
-      });
+      const result = await NativeModules.WidgetBridge.pickImages(
+        MAX_IMAGES - images.length,
+        0.7
+      );
 
       if (!result.canceled && result.assets.length > 0) {
-        const picked: ImageAttachment[] = result.assets.map((asset) => ({
+        const picked: ImageAttachment[] = result.assets.map((asset: ImageAttachment) => ({
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
