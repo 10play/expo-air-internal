@@ -13,6 +13,7 @@ import {
   type AnyConversationEntry,
   type AssistantPart,
   type AssistantPartsMessage,
+  type ImageAttachment,
 } from "./services/websocket";
 import { requestPushToken, setupTapHandler } from "./services/notifications";
 import { BranchSwitcher } from "./components/BranchSwitcher";
@@ -314,7 +315,7 @@ export function BubbleContent({
     }
   }, [finalizeCurrentParts]);
 
-  const handleSubmit = useCallback(async (prompt: string) => {
+  const handleSubmit = useCallback(async (prompt: string, images?: ImageAttachment[]) => {
     // Request push token on first submit (dev-only, lazy permission)
     if (!pushTokenSentRef.current) {
       const token = await requestPushToken();
@@ -327,12 +328,13 @@ export function BubbleContent({
       }
     }
 
-    // Add user prompt to messages for display
+    // Add user prompt to messages for display (with local image URIs)
     setMessages((prev) => [
       ...prev,
       {
         type: "user_prompt" as const,
         content: prompt,
+        images,
         timestamp: Date.now(),
       },
     ]);
@@ -341,9 +343,15 @@ export function BubbleContent({
     currentPromptIdRef.current = null;
     setCurrentParts([]);
 
+    // Send prompt immediately with local file paths
+    // The server runs on the same machine and can read simulator temp files directly
+    const imagePaths = images && images.length > 0
+      ? images.map((img) => img.uri)
+      : undefined;
+
     const client = getWebSocketClient();
     if (client) {
-      client.sendPrompt(prompt);
+      client.sendPrompt(prompt, imagePaths);
     }
   }, []);
 
