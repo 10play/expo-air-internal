@@ -13,6 +13,7 @@ import {
   type AnyConversationEntry,
   type AssistantPart,
   type AssistantPartsMessage,
+  type ImageAttachment,
 } from "./services/websocket";
 import { requestPushToken, setupTapHandler } from "./services/notifications";
 import { BranchSwitcher } from "./components/BranchSwitcher";
@@ -66,7 +67,9 @@ export function BubbleContent({
   const [activeTab, setActiveTab] = useState<TabType>("chat");
   const [showBranchSwitcher, setShowBranchSwitcher] = useState(false);
   const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
+  const previousBranchRef = useRef<string>("main");
   const pushTokenSentRef = useRef(false);
   const partIdCounter = useRef(0);
   // Use refs to avoid stale closure issues in handleMessage callback
@@ -294,12 +297,19 @@ export function BubbleContent({
         break;
       case "branches_list":
         setBranches(message.branches);
+        setBranchesLoading(false);
         break;
       case "branch_switched":
         if (message.success) {
-          setShowBranchSwitcher(false);
           setBranchError(null);
         } else if (message.error) {
+          // Revert optimistic update on failure
+          const prev = previousBranchRef.current;
+          setBranchName(prev);
+          setBranches((b) =>
+            b.map((br) => ({ ...br, isCurrent: br.name === prev }))
+          );
+          setShowBranchSwitcher(true);
           setBranchError(message.error);
         }
         break;
@@ -314,7 +324,7 @@ export function BubbleContent({
     }
   }, [finalizeCurrentParts]);
 
-  const handleSubmit = useCallback(async (prompt: string) => {
+  const handleSubmit = useCallback(async (prompt: string, images?: ImageAttachment[]) => {
     // Request push token on first submit (dev-only, lazy permission)
     if (!pushTokenSentRef.current) {
       const token = await requestPushToken();
@@ -327,12 +337,13 @@ export function BubbleContent({
       }
     }
 
-    // Add user prompt to messages for display
+    // Add user prompt to messages for display (with local image URIs)
     setMessages((prev) => [
       ...prev,
       {
         type: "user_prompt" as const,
         content: prompt,
+        images,
         timestamp: Date.now(),
       },
     ]);
@@ -341,9 +352,15 @@ export function BubbleContent({
     currentPromptIdRef.current = null;
     setCurrentParts([]);
 
+    // Send prompt immediately with local file paths
+    // The server runs on the same machine and can read simulator temp files directly
+    const imagePaths = images && images.length > 0
+      ? images.map((img) => img.uri)
+      : undefined;
+
     const client = getWebSocketClient();
     if (client) {
-      client.sendPrompt(prompt);
+      client.sendPrompt(prompt, imagePaths);
     }
   }, []);
 
@@ -388,6 +405,7 @@ export function BubbleContent({
     setShowBranchSwitcher((prev) => !prev);
     // Fetch branches when opening (side-effect outside state updater)
     if (!showBranchSwitcher) {
+      setBranchesLoading(true);
       const client = getWebSocketClient();
       if (client) {
         client.requestBranches();
@@ -397,11 +415,18 @@ export function BubbleContent({
 
   const handleBranchSelect = useCallback((name: string) => {
     setBranchError(null);
+    // Optimistically update UI before server confirms
+    previousBranchRef.current = branchName;
+    setBranchName(name);
+    setBranches((prev) =>
+      prev.map((b) => ({ ...b, isCurrent: b.name === name }))
+    );
+    setShowBranchSwitcher(false);
     const client = getWebSocketClient();
     if (client) {
       client.requestSwitchBranch(name);
     }
-  }, []);
+  }, [branchName]);
 
   const handleBranchCreate = useCallback((name: string) => {
     setBranchError(null);
@@ -460,6 +485,7 @@ export function BubbleContent({
         <BranchSwitcher
           branches={branches}
           currentBranch={branchName}
+          loading={branchesLoading}
           onSelect={handleBranchSelect}
           onCreate={handleBranchCreate}
           onClose={() => { setShowBranchSwitcher(false); setBranchError(null); }}
