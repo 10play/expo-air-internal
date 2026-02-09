@@ -14,7 +14,7 @@ interface UseGitStateOptions {
 }
 
 export function useGitState({ handleSubmit, setActiveTab }: UseGitStateOptions) {
-  const [branchName, setBranchName] = useState<string>("main");
+  const [branchName, setBranchName] = useState<string>("");
   const [gitChanges, setGitChanges] = useState<GitChange[]>([]);
   const [hasPR, setHasPR] = useState(false);
   const [prUrl, setPrUrl] = useState<string | undefined>();
@@ -22,7 +22,7 @@ export function useGitState({ handleSubmit, setActiveTab }: UseGitStateOptions) 
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
-  const previousBranchRef = useRef<string>("main");
+  const previousBranchRef = useRef<string>("");
 
   // Extract PR number from URL (e.g., "https://github.com/org/repo/pull/12" → "12")
   const prNumber = prUrl?.match(/\/pull\/(\d+)/)?.[1];

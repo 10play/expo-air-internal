@@ -45,11 +45,17 @@ export function Header({ status, branchName, onBranchPress }: HeaderProps) {
         <Text style={styles.closeButtonText}>✕</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.branchButton} onPress={onBranchPress}>
-        <Text style={styles.branchName} numberOfLines={1}>
-          {branchName}
-        </Text>
-        <Text style={styles.branchChevron}>▾</Text>
+      <TouchableOpacity style={styles.branchButton} onPress={onBranchPress} disabled={!branchName}>
+        {branchName ? (
+          <>
+            <Text style={styles.branchName} numberOfLines={1}>
+              {branchName}
+            </Text>
+            <Text style={styles.branchChevron}>▾</Text>
+          </>
+        ) : (
+          <View style={styles.branchLoadingBar} />
+        )}
       </TouchableOpacity>
 
       <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
@@ -177,6 +183,12 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_MUTED,
     fontSize: TYPOGRAPHY.SIZE_SM,
     marginLeft: SPACING.XS,
+  },
+  branchLoadingBar: {
+    width: 80,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   statusDot: {
     width: SIZES.STATUS_DOT,
