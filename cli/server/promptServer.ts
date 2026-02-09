@@ -332,14 +332,21 @@ export class PromptServer {
             this.log("Restored auto-stashed changes", "info");
           } catch {
             this.log("Warning: failed to pop auto-stash (possible merge conflict). Stash preserved.", "warn");
-            // Re-stash the conflicted working directory state to clean it up
+            // Reset the conflicted working directory state, then re-stash to clean it up
             try {
+              // Reset to clear merge conflict markers
+              execFileSync("git", ["reset", "--hard", "HEAD"], {
+                cwd: this.projectRoot,
+                encoding: "utf-8",
+                stdio: ["pipe", "pipe", "pipe"],
+              });
+              // Re-stash the original changes
               execFileSync("git", ["stash", "push", "-u", "-m", "expo-air-auto-stash"], {
                 cwd: this.projectRoot,
                 encoding: "utf-8",
                 stdio: ["pipe", "pipe", "pipe"],
               });
-              this.log("Re-stashed conflicted changes", "info");
+              this.log("Re-stashed changes after conflict", "info");
             } catch {
               this.log("Warning: failed to re-stash after conflict", "warn");
             }
