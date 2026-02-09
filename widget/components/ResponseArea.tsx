@@ -16,21 +16,32 @@ export function ResponseArea({ messages, currentParts }: ResponseAreaProps) {
   const scrollViewHeightRef = useRef(0);
 
   // Track if user is at bottom (within 50px threshold)
-  const handleScroll = useCallback((event: { nativeEvent: NativeScrollEvent }) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    setIsAtBottom(distanceFromBottom < 50);
-  }, []);
+  const handleScroll = useCallback(
+    (event: { nativeEvent: NativeScrollEvent }) => {
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - layoutMeasurement.height - contentOffset.y;
+      setIsAtBottom(distanceFromBottom < 50);
+    },
+    [],
+  );
 
   // Track content size changes
-  const handleContentSizeChange = useCallback((width: number, height: number) => {
-    contentHeightRef.current = height;
-  }, []);
+  const handleContentSizeChange = useCallback(
+    (width: number, height: number) => {
+      contentHeightRef.current = height;
+    },
+    [],
+  );
 
   // Track scroll view layout
-  const handleLayout = useCallback((event: { nativeEvent: { layout: { height: number } } }) => {
-    scrollViewHeightRef.current = event.nativeEvent.layout.height;
-  }, []);
+  const handleLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      scrollViewHeightRef.current = event.nativeEvent.layout.height;
+    },
+    [],
+  );
 
   // Auto-scroll only when at bottom
   useEffect(() => {
@@ -54,7 +65,8 @@ export function ResponseArea({ messages, currentParts }: ResponseAreaProps) {
 
   // Scroll to bottom when keyboard opens (if already at bottom)
   useEffect(() => {
-    const keyboardEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const keyboardEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const subscription = Keyboard.addListener(keyboardEvent, () => {
       if (isAtBottom) {
         // Delay to let the native resize happen first
@@ -103,7 +115,11 @@ export function ResponseArea({ messages, currentParts }: ResponseAreaProps) {
         )}
       </ScrollView>
       {!isAtBottom && (
-        <TouchableOpacity style={styles.scrollButton} onPress={scrollToBottom} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.scrollButton}
+          onPress={scrollToBottom}
+          activeOpacity={0.8}
+        >
           <Text style={styles.scrollButtonText}>↓</Text>
         </TouchableOpacity>
       )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { PromptInput, type PromptInputHandle } from "./components/PromptInput";
 import { ResponseArea } from "./components/ResponseArea";
 import { GitChangesTab } from "./components/GitChangesTab";
@@ -9,7 +9,7 @@ import { TabBar, type TabType } from "./components/TabBar";
 import { useWebSocketMessages } from "./hooks/useWebSocketMessages";
 import { useGitState } from "./hooks/useGitState";
 import type { ServerMessage } from "./services/websocket";
-import { LAYOUT, COLORS } from "./constants/design";
+import { LAYOUT, COLORS, SPACING, TYPOGRAPHY } from "./constants/design";
 
 interface BubbleContentProps {
   size?: number;
@@ -91,13 +91,15 @@ export function BubbleContent({
         onViewPR={git.handleViewPR}
       />
       <View style={styles.body}>
-        {activeTab === "chat" ? (
+        {status === "disconnected" && messages.length === 0 ? (
+          <DisconnectedView />
+        ) : activeTab === "chat" ? (
           <ResponseArea messages={messages} currentParts={currentParts} />
         ) : (
           <GitChangesTab changes={git.gitChanges} onDiscard={git.handleDiscard} />
         )}
       </View>
-      {activeTab === "chat" && (
+      {activeTab === "chat" && status !== "disconnected" && (
         <PromptInput
           ref={promptInputRef}
           onSubmit={handleSubmit}
@@ -120,6 +122,20 @@ export function BubbleContent({
   );
 }
 
+function DisconnectedView() {
+  return (
+    <View style={styles.disconnectedContainer}>
+      <Text style={styles.disconnectedTitle}>Server not running</Text>
+      <Text style={styles.disconnectedSubtitle}>
+        Start the development server from your project directory:
+      </Text>
+      <View style={styles.codeBlock}>
+        <Text style={styles.codeText}>npx expo-air fly</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   collapsedPill: {
     width: 100,
@@ -137,5 +153,36 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     backgroundColor: COLORS.BACKGROUND_ELEVATED,
+  },
+  disconnectedContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: SPACING.XXL,
+  },
+  disconnectedTitle: {
+    color: COLORS.TEXT_MUTED,
+    fontSize: TYPOGRAPHY.SIZE_LG,
+    fontWeight: TYPOGRAPHY.WEIGHT_SEMIBOLD,
+    marginBottom: SPACING.SM,
+  },
+  disconnectedSubtitle: {
+    color: COLORS.TEXT_MUTED,
+    fontSize: TYPOGRAPHY.SIZE_SM,
+    textAlign: "center",
+    marginBottom: SPACING.LG,
+  },
+  codeBlock: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: LAYOUT.BORDER_RADIUS_SM,
+    paddingHorizontal: SPACING.LG,
+    paddingVertical: SPACING.MD,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  codeText: {
+    color: COLORS.TEXT_SECONDARY,
+    fontSize: TYPOGRAPHY.SIZE_SM,
+    fontFamily: "Menlo",
   },
 });
