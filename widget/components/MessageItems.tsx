@@ -78,7 +78,7 @@ function ChatImageThumb({ uri }: { uri: string }) {
 
 function UserPromptItem({ message }: { message: UserPromptMessage }) {
   return (
-    <View style={styles.userPromptContainer}>
+    <View style={[styles.userPromptContainer, message.pending && styles.userPromptPending]}>
       {message.images && message.images.length > 0 && (
         <View style={styles.userImages}>
           {message.images.map((img, i) => (
@@ -87,7 +87,12 @@ function UserPromptItem({ message }: { message: UserPromptMessage }) {
         </View>
       )}
       {message.content ? (
-        <Text style={styles.userPromptText} selectable>{message.content}</Text>
+        <View style={styles.userPromptRow}>
+          <Text style={styles.userPromptText} selectable>{message.content}</Text>
+          {message.pending && (
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.4)" style={styles.pendingIndicator} />
+          )}
+        </View>
       ) : null}
     </View>
   );
@@ -312,10 +317,21 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     maxWidth: "85%",
   },
+  userPromptPending: {
+    opacity: 0.7,
+  },
+  userPromptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   userPromptText: {
     color: COLORS.TEXT_PRIMARY,
     fontSize: TYPOGRAPHY.SIZE_LG,
     lineHeight: 20,
+    flexShrink: 1,
+  },
+  pendingIndicator: {
+    marginLeft: SPACING.SM,
   },
   userImages: {
     flexDirection: "row",

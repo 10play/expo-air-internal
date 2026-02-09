@@ -142,7 +142,16 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
         setCurrentParts([]);
         break;
       case "status":
-        // Status is handled by the status indicator
+        // Clear pending flag on user prompt once server acknowledges
+        if (message.status === "processing") {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.type === "user_prompt" && last.pending) {
+              return [...prev.slice(0, -1), { ...last, pending: false }];
+            }
+            return prev;
+          });
+        }
         break;
       case "session_cleared":
         // Clear all messages for new session
@@ -257,6 +266,7 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
         type: "user_prompt" as const,
         content: prompt,
         images,
+        pending: true,
         timestamp: Date.now(),
       },
     ]);

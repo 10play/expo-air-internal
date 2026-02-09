@@ -104,6 +104,7 @@ export interface UserPromptMessage {
   type: "user_prompt";
   content: string;
   images?: ImageAttachment[];
+  pending?: boolean;
   timestamp: number;
 }
 
