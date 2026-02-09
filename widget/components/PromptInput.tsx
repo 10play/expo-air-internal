@@ -7,6 +7,7 @@ import {
   Image,
   ScrollView,
   Alert,
+  ActivityIndicator,
   NativeModules,
   NativeEventEmitter,
 } from "react-native";
@@ -22,6 +23,7 @@ interface PromptInputProps {
   onSubmit: (prompt: string, images?: ImageAttachment[]) => void;
   onStop?: () => void;
   disabled?: boolean;
+  isSending?: boolean;
   isProcessing?: boolean;
 }
 
@@ -31,6 +33,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(({
   onSubmit,
   onStop,
   disabled = false,
+  isSending = false,
   isProcessing = false,
 }, ref) => {
   const [text, setText] = useState("");
@@ -53,10 +56,12 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(({
     return () => subscription.remove();
   }, []);
 
+  const isBusy = isSending || isProcessing;
+
   const handleSubmit = () => {
     const trimmed = text.trim();
     const hasContent = trimmed.length > 0 || images.length > 0;
-    if (hasContent && !disabled && !isProcessing) {
+    if (hasContent && !disabled && !isBusy) {
       onSubmit(trimmed, images.length > 0 ? images : undefined);
       setText("");
       setImages([]);
@@ -94,7 +99,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(({
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const canSubmit = (text.trim().length > 0 || images.length > 0) && !disabled && !isProcessing;
+  const canSubmit = (text.trim().length > 0 || images.length > 0) && !disabled && !isBusy;
 
   return (
     <View style={styles.outerContainer}>

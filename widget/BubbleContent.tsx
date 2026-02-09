@@ -105,6 +105,7 @@ export function BubbleContent({
           onSubmit={handleSubmit}
           onStop={handleStop}
           disabled={status === "disconnected"}
+          isSending={status === "sending"}
           isProcessing={status === "processing"}
         />
       )}
