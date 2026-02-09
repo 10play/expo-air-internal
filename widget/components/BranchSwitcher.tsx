@@ -61,48 +61,53 @@ export function BranchSwitcher({
             </Text>
           </View>
         )}
-        {loading && branches.length === 0 ? (
+        {loading ? (
           <View style={styles.loadingContainer}>
             <LoadingDots />
           </View>
         ) : (
           <ScrollView style={styles.branchList} bounces={false}>
-            {branches.map((branch, index) => (
-              <TouchableOpacity
-                key={branch.name}
-                style={[
-                  styles.branchItem,
-                  branch.isCurrent && styles.branchItemCurrent,
-                  index === 0 && styles.branchItemFirst,
-                ]}
-                onPress={() => {
-                  if (!branch.isCurrent) {
-                    onSelect(branch.name);
-                  }
-                }}
-                activeOpacity={branch.isCurrent ? 1 : 0.6}
-              >
-                <View style={styles.branchInfo}>
-                  <Text
-                    style={[
-                      styles.branchName,
-                      branch.isCurrent && styles.branchNameCurrent,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {branch.name}
-                  </Text>
-                  {branch.prNumber && (
-                    <View style={styles.prBadge}>
-                      <Text style={styles.prBadgeText}>#{branch.prNumber}</Text>
-                    </View>
+            {branches.map((branch, index) => {
+              const isCurrent = branch.name === currentBranch;
+              return (
+                <TouchableOpacity
+                  key={branch.name}
+                  style={[
+                    styles.branchItem,
+                    isCurrent && styles.branchItemCurrent,
+                    index === 0 && styles.branchItemFirst,
+                  ]}
+                  onPress={() => {
+                    if (!isCurrent) {
+                      onSelect(branch.name);
+                    }
+                  }}
+                  activeOpacity={isCurrent ? 1 : 0.6}
+                >
+                  <View style={styles.branchInfo}>
+                    <Text
+                      style={[
+                        styles.branchName,
+                        isCurrent && styles.branchNameCurrent,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {branch.name}
+                    </Text>
+                    {branch.prNumber && (
+                      <View style={styles.prBadge}>
+                        <Text style={styles.prBadgeText}>
+                          #{branch.prNumber}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {isCurrent && (
+                    <Text style={styles.currentIndicator}>✓</Text>
                   )}
-                </View>
-                {branch.isCurrent && (
-                  <Text style={styles.currentIndicator}>✓</Text>
-                )}
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         )}
 
