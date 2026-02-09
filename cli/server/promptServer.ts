@@ -40,6 +40,7 @@ export class PromptServer {
   private currentStreamedResponse: string = "";
   private lastToolInput: unknown = undefined;
   private secret: string | null = null;
+  private activePromptId: string | null = null;
   private git: GitOperations;
 
   constructor(port: number, projectRoot?: string, secret?: string | null) {
@@ -617,6 +618,27 @@ export class PromptServer {
       this.log(`Sent ${this.conversationHistory.length} history entries to client`, "info");
     }
 
+    // If a query is currently running, replay its state to the new client
+    if (this.currentQuery !== null && this.activePromptId !== null) {
+      this.sendToClient(ws, {
+        type: "status",
+        status: "processing",
+        promptId: this.activePromptId,
+        timestamp: Date.now(),
+      });
+
+      if (this.currentStreamedResponse) {
+        this.sendToClient(ws, {
+          type: "stream",
+          promptId: this.activePromptId,
+          chunk: this.currentStreamedResponse,
+          done: false,
+          timestamp: Date.now(),
+        });
+      }
+      this.log("Replayed active query state to reconnected client", "info");
+    }
+
     // Send initial git status
     const branchName = this.git.getBranchName();
     const changes = this.git.getGitChanges();
@@ -716,7 +738,7 @@ export class PromptServer {
         this.log(`Prompt includes ${message.imagePaths.length} image(s)`, "info");
       }
 
-      this.executeWithSDK(ws, promptId, message.content, persistedImagePaths);
+      this.executeWithSDK(promptId, message.content, persistedImagePaths);
       return;
     }
 
@@ -880,7 +902,6 @@ export class PromptServer {
   }
 
   private async executeWithSDK(
-    ws: WebSocket,
     promptId: string,
     content: string,
     imagePaths?: string[]
@@ -894,8 +915,10 @@ export class PromptServer {
     };
     this.conversationHistory.push(historyEntry);
 
+    this.activePromptId = promptId;
+
     // Send processing status
-    this.sendToClient(ws, {
+    this.broadcastToClients({
       type: "status",
       status: "processing",
       promptId,
@@ -965,7 +988,7 @@ IMPORTANT CONSTRAINTS:
               hooks: [async (input) => {
                 try {
                   if (input.hook_event_name === "PostToolUse") {
-                    this.sendToolUpdate(ws, promptId, input.tool_name, "completed", input.tool_response);
+                    this.sendToolUpdate(promptId, input.tool_name, "completed", input.tool_response);
                     this.saveToolToHistory(input.tool_name, "completed", input.tool_response);
                   }
                 } catch (e) {
@@ -979,7 +1002,7 @@ IMPORTANT CONSTRAINTS:
                 try {
                   if (input.hook_event_name === "PostToolUseFailure") {
                     const error = typeof input.error === "string" ? input.error : JSON.stringify(input.error || "Unknown error");
-                    this.sendToolUpdate(ws, promptId, input.tool_name, "failed", error);
+                    this.sendToolUpdate(promptId, input.tool_name, "failed", error);
                     this.saveToolToHistory(input.tool_name, "failed", error);
                   }
                 } catch (e) {
@@ -1017,7 +1040,7 @@ IMPORTANT CONSTRAINTS:
           ) {
             // Accumulate streamed text for history persistence
             this.currentStreamedResponse += event.delta.text;
-            this.sendToClient(ws, {
+            this.broadcastToClients({
               type: "stream",
               promptId,
               chunk: event.delta.text,
@@ -1032,7 +1055,7 @@ IMPORTANT CONSTRAINTS:
           // Final result
           const isSuccess = message.subtype === "success";
 
-          this.sendToClient(ws, {
+          this.broadcastToClients({
             type: "stream",
             promptId,
             chunk: "",
@@ -1040,7 +1063,7 @@ IMPORTANT CONSTRAINTS:
             timestamp: Date.now(),
           });
 
-          this.sendToClient(ws, {
+          this.broadcastToClients({
             type: "result",
             promptId,
             success: isSuccess,
@@ -1112,7 +1135,7 @@ IMPORTANT CONSTRAINTS:
         this.saveSession();
       }
 
-      this.sendToClient(ws, {
+      this.broadcastToClients({
         type: "error",
         promptId,
         message: errorMessage,
@@ -1121,11 +1144,12 @@ IMPORTANT CONSTRAINTS:
     } finally {
       this.currentQuery = null;
       this.abortController = null;
+      this.activePromptId = null;
       this.currentStreamedResponse = "";  // Clear accumulated response
       this.lastToolInput = undefined;  // Clear any pending tool input
 
       // Send idle status
-      this.sendToClient(ws, {
+      this.broadcastToClients({
         type: "status",
         status: "idle",
         timestamp: Date.now(),
@@ -1139,14 +1163,19 @@ IMPORTANT CONSTRAINTS:
     }
   }
 
+  private broadcastToClients(message: OutgoingMessage): void {
+    for (const client of this.clients) {
+      this.sendToClient(client, message);
+    }
+  }
+
   private sendToolUpdate(
-    ws: WebSocket,
     promptId: string,
     toolName: string,
     status: "completed" | "failed",
     output?: unknown
   ): void {
-    this.sendToClient(ws, {
+    this.broadcastToClients({
       type: "tool",
       promptId,
       toolName,
