@@ -250,19 +250,7 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
   }, []);
 
   const handleSubmit = useCallback(async (prompt: string, images?: ImageAttachment[]) => {
-    // Request push token on first submit (dev-only, lazy permission)
-    if (!pushTokenSentRef.current) {
-      const token = await requestPushToken();
-      if (token) {
-        const client = getWebSocketClient();
-        if (client?.isConnected()) {
-          client.sendPushToken(token);
-          pushTokenSentRef.current = true;
-        }
-      }
-    }
-
-    // Add user prompt to messages for display (with local image URIs)
+    // Add user prompt to messages immediately for optimistic display
     setMessages((prev) => [
       ...prev,
       {
@@ -286,6 +274,18 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
     const client = getWebSocketClient();
     if (client) {
       client.sendPrompt(prompt, imagePaths);
+    }
+
+    // Request push token lazily on first submit (don't block UI)
+    if (!pushTokenSentRef.current) {
+      const token = await requestPushToken();
+      if (token) {
+        const wsClient = getWebSocketClient();
+        if (wsClient?.isConnected()) {
+          wsClient.sendPushToken(token);
+          pushTokenSentRef.current = true;
+        }
+      }
     }
   }, []);
 
