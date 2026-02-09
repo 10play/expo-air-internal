@@ -1,9 +1,53 @@
 #import "WidgetBridge.h"
-#import <ReactCommon/RCTTurboModule.h>
 #import <UserNotifications/UserNotifications.h>
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
 
-// Extend WidgetBridge to conform to RCTTurboModule in .mm file
-@interface WidgetBridge () <RCTTurboModule>
+static NSString *saveImageToTemp(UIImage *image, CGFloat quality) {
+    NSData *data = UIImageJPEGRepresentation(image, quality);
+    if (!data) return nil;
+    NSString *filename = [NSString stringWithFormat:@"widget-paste-%@.jpg", [[NSUUID UUID] UUIDString]];
+    NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+    if ([data writeToFile:path atomically:YES]) {
+        return path;
+    }
+    return nil;
+}
+
+static WidgetBridge *sharedBridgeInstance = nil;
+static IMP originalTextViewPasteIMP = NULL;
+static IMP originalCanPerformActionIMP = NULL;
+
+static BOOL swizzledCanPerformAction(UITextView *self, SEL _cmd, SEL action, id sender) {
+    if (action == @selector(paste:) && [UIPasteboard generalPasteboard].hasImages) {
+        return YES;
+    }
+    if (originalCanPerformActionIMP) {
+        return ((BOOL(*)(id, SEL, SEL, id))originalCanPerformActionIMP)(self, _cmd, action, sender);
+    }
+    return NO;
+}
+
+static void swizzledTextViewPaste(UITextView *self, SEL _cmd, id sender) {
+    UIPasteboard *pb = [UIPasteboard generalPasteboard];
+    if (pb.hasImages && pb.image) {
+        UIImage *image = pb.image;
+        NSString *path = saveImageToTemp(image, 0.8);
+        if (path && sharedBridgeInstance) {
+            [sharedBridgeInstance sendEventWithName:@"onClipboardImagePaste" body:@{
+                @"uri": path,
+                @"width": @(image.size.width),
+                @"height": @(image.size.height),
+            }];
+            return;
+        }
+    }
+    if (originalTextViewPasteIMP) {
+        ((void(*)(id, SEL, id))originalTextViewPasteIMP)(self, _cmd, sender);
+    }
+}
+
+@interface WidgetBridge ()
 @end
 
 @implementation WidgetBridge
@@ -12,6 +56,31 @@ RCT_EXPORT_MODULE();
 
 + (BOOL)requiresMainQueueSetup {
     return YES;
+}
+
++ (void)initialize {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        Method pasteMethod = class_getInstanceMethod([UITextView class], @selector(paste:));
+        originalTextViewPasteIMP = method_getImplementation(pasteMethod);
+        method_setImplementation(pasteMethod, (IMP)swizzledTextViewPaste);
+
+        Method canPerformMethod = class_getInstanceMethod([UITextView class], @selector(canPerformAction:withSender:));
+        originalCanPerformActionIMP = method_getImplementation(canPerformMethod);
+        method_setImplementation(canPerformMethod, (IMP)swizzledCanPerformAction);
+    });
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        sharedBridgeInstance = self;
+    }
+    return self;
+}
+
+- (NSArray<NSString *> *)supportedEvents {
+    return @[@"onClipboardImagePaste"];
 }
 
 RCT_EXPORT_METHOD(collapse) {
