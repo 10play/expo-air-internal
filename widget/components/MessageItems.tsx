@@ -192,11 +192,9 @@ function ResultItem({ result }: { result: ResultMessage }) {
       {result.result && (
         <Text style={styles.responseText} selectable>{result.result}</Text>
       )}
-      {(result.costUsd !== undefined || result.durationMs !== undefined) && (
+      {result.durationMs !== undefined && (
         <Text style={styles.metaText}>
-          {result.durationMs !== undefined && `${result.durationMs}ms`}
-          {result.costUsd !== undefined && result.durationMs !== undefined && " • "}
-          {result.costUsd !== undefined && `$${result.costUsd.toFixed(4)}`}
+          {`${result.durationMs}ms`}
         </Text>
       )}
     </View>
