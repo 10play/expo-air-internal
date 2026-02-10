@@ -365,12 +365,14 @@ export class WebSocketClient {
 
     if (imagePaths && imagePaths.length > 0) {
       try {
+        console.log("[expo-air] Uploading", imagePaths.length, "image(s) to:", this.getUploadUrl());
         const serverPaths = await this.uploadImages(imagePaths);
+        console.log("[expo-air] Upload returned paths:", serverPaths);
         if (serverPaths.length > 0) {
           message.imagePaths = serverPaths;
         }
       } catch (error) {
-        console.warn("[expo-air] Image upload failed:", error);
+        console.error("[expo-air] Image upload failed:", error);
       }
     }
 
@@ -378,13 +380,21 @@ export class WebSocketClient {
     this.setStatus("sending");
   }
 
+  private getUploadUrl(): string {
+    let url = this.options.url;
+    // ws:// → http://, wss:// → https://
+    if (url.startsWith("wss://")) url = "https://" + url.slice(6);
+    else if (url.startsWith("ws://")) url = "http://" + url.slice(5);
+    // Insert /upload before the query string
+    const qIndex = url.indexOf("?");
+    if (qIndex >= 0) {
+      return url.slice(0, qIndex) + "/upload" + url.slice(qIndex);
+    }
+    return url + "/upload";
+  }
+
   private async uploadImages(localPaths: string[]): Promise<string[]> {
-    // Convert ws:// URL to http:// for the upload endpoint
-    const httpUrl = this.options.url
-      .replace(/^ws:\/\//, "http://")
-      .replace(/^wss:\/\//, "https://");
-    const urlObj = new URL(httpUrl);
-    const uploadUrl = `${urlObj.origin}/upload?secret=${urlObj.searchParams.get("secret") || ""}`;
+    const uploadUrl = this.getUploadUrl();
 
     const formData = new FormData();
     for (const path of localPaths) {
@@ -404,7 +414,8 @@ export class WebSocketClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status}`);
+      const text = await response.text().catch(() => "");
+      throw new Error(`Upload failed: ${response.status} ${text}`);
     }
 
     const result = await response.json();
