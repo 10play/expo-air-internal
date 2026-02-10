@@ -77,7 +77,7 @@ export function Header({ status, branchName, onBranchPress }: HeaderProps) {
         delayLongPress={500}
         activeOpacity={0.6}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        style={styles.reloadButton}
+        style={styles.statusDotTouchable}
       >
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
       </TouchableOpacity>
@@ -219,11 +219,9 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.STATUS_DOT / 2,
     marginLeft: SPACING.MD,
   },
-  reloadButton: {
+  statusDotTouchable: {
     marginLeft: SPACING.MD,
     padding: 10,
-    alignItems: "center",
-    justifyContent: "center",
   },
   collapsedPill: {
     width: 100,
