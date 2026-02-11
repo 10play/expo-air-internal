@@ -39,8 +39,8 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
 
       let content = fs.readFileSync(appDelegatePath, "utf-8");
 
-      // Check if already patched
-      if (content.includes("ExpoAirBundleURL")) {
+      // Check if already patched (both patches must be present)
+      if (content.includes("ExpoAirBundleURL") && content.includes("ExpoAirSourceURL")) {
         return config;
       }
 
@@ -66,9 +66,33 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
 
       if (bundleURLPattern.test(content)) {
         content = content.replace(bundleURLPattern, patchedBundleURL);
-        fs.writeFileSync(appDelegatePath, content);
-        console.log("[expo-air] Patched AppDelegate for tunnel support");
+        console.log("[expo-air] Patched bundleURL() for tunnel support");
       }
+
+      // Patch sourceURL(for:) to bypass bridge.bundleURL when tunnel is configured.
+      // The dev client sets bridge.bundleURL which creates a malformed URL by combining
+      // the tunnel hostname with the local Metro port. When a tunnel URL is configured,
+      // we call bundleURL() directly which has the correct tunnel logic.
+      const sourceURLPattern =
+        /override func sourceURL\(for bridge: RCTBridge\) -> URL\? \{[\s\S]*?bridge\.bundleURL \?\? bundleURL\(\)[\s\S]*?\}/;
+
+      const patchedSourceURL = `override func sourceURL(for bridge: RCTBridge) -> URL? {
+    // ExpoAirSourceURL: Use tunnel URL when configured, otherwise fall back to dev-client behavior.
+    if let expoAir = Bundle.main.object(forInfoDictionaryKey: "ExpoAir") as? [String: Any],
+       let appMetroUrl = expoAir["appMetroUrl"] as? String,
+       !appMetroUrl.isEmpty {
+      return bundleURL()
+    }
+    return bridge.bundleURL ?? bundleURL()
+  }`;
+
+      if (sourceURLPattern.test(content)) {
+        content = content.replace(sourceURLPattern, patchedSourceURL);
+        console.log("[expo-air] Patched sourceURL(for:) for tunnel support");
+      }
+
+      fs.writeFileSync(appDelegatePath, content);
+      console.log("[expo-air] Wrote patched AppDelegate");
 
       // Patch bridging header to expose RCTBridge to Swift.
       // The prebuilt React.framework module map doesn't include RCTBridge.h,
