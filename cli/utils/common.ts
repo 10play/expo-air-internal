@@ -128,7 +128,7 @@ export function resolveProjectRoot(projectOption?: string): string {
 
   if (!projectOption && fs.existsSync(path.join(exampleDir, "app.json"))) {
     // Check if we're in the package root (not in example already)
-    if (!fs.existsSync(path.join(projectRoot, "app.json"))) {
+    if (!validateExpoProject(projectRoot)) {
       projectRoot = exampleDir;
     }
   }
