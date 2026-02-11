@@ -54,18 +54,9 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
     if let expoAir = Bundle.main.object(forInfoDictionaryKey: "ExpoAir") as? [String: Any],
        let appMetroUrl = expoAir["appMetroUrl"] as? String,
        !appMetroUrl.isEmpty,
-       let url = URL(string: appMetroUrl),
-       let host = url.host {
-      // Configure RCTBundleURLProvider so expo-dev-client also uses the tunnel.
-      // The dev client bypasses sourceURL/bundleURL and reads from the provider directly.
-      let provider = RCTBundleURLProvider.sharedSettings()
-      provider.jsLocation = "\\(host):443"
-      provider.packagerScheme = "https"
-      print("[expo-air] Configured RCTBundleURLProvider for tunnel: \\(host)")
-
-      if let tunnelURL = URL(string: "\\(appMetroUrl)/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true") {
-        return tunnelURL
-      }
+       let tunnelURL = URL(string: "\\(appMetroUrl)/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true") {
+      print("[expo-air] Using tunnel URL for main app: \\(tunnelURL)")
+      return tunnelURL
     }
     return RCTBundleURLProvider.sharedSettings().jsBundleURL(forBundleRoot: ".expo/.virtual-metro-entry")
 #else
@@ -100,24 +91,26 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
         console.log("[expo-air] Patched sourceURL(for:) for tunnel support");
       }
 
-      // Patch application(didFinishLaunchingWithOptions:) to configure RCTBundleURLProvider
-      // BEFORE the dev launcher starts. The dev launcher completely bypasses AppDelegate's
-      // sourceURL/bundleURL and uses RCTBundleURLProvider directly, so we must configure
-      // it early in the app lifecycle.
+      // Patch application(didFinishLaunchingWithOptions:) to inject the tunnel URL into
+      // the expo-dev-launcher's recently opened apps registry. The dev launcher completely
+      // bypasses AppDelegate's sourceURL/bundleURL and manages its own URL loading.
+      // By registering the tunnel URL as a recently opened app, the dev launcher will
+      // auto-connect to it on startup (it checks recently opened apps after process args).
       const didFinishPattern =
         /let delegate = ReactNativeDelegate\(\)/;
 
-      const providerPatch = `// ExpoAirProvider: Configure RCTBundleURLProvider for tunnel before dev launcher starts.
+      const providerPatch = `// ExpoAirProvider: Register tunnel URL with expo-dev-launcher so it auto-connects.
     #if DEBUG
     if let expoAir = Bundle.main.object(forInfoDictionaryKey: "ExpoAir") as? [String: Any],
        let appMetroUrl = expoAir["appMetroUrl"] as? String,
-       !appMetroUrl.isEmpty,
-       let url = URL(string: appMetroUrl),
-       let host = url.host {
-      let provider = RCTBundleURLProvider.sharedSettings()
-      provider.jsLocation = "\\(host):443"
-      provider.packagerScheme = "https"
-      print("[expo-air] Early RCTBundleURLProvider config for tunnel: \\(host)")
+       !appMetroUrl.isEmpty {
+      let registryKey = "expo.devlauncher.recentlyopenedapps"
+      let timestamp = Int64(Date().timeIntervalSince1970 * 1000)
+      let entry: [String: Any] = ["timestamp": timestamp, "url": appMetroUrl]
+      var registry = UserDefaults.standard.dictionary(forKey: registryKey) ?? [:]
+      registry[appMetroUrl] = entry
+      UserDefaults.standard.set(registry, forKey: registryKey)
+      print("[expo-air] Registered tunnel URL with dev launcher: \\(appMetroUrl)")
     }
     #endif
 
@@ -125,7 +118,7 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
 
       if (didFinishPattern.test(content)) {
         content = content.replace(didFinishPattern, providerPatch);
-        console.log("[expo-air] Patched didFinishLaunchingWithOptions for early provider config");
+        console.log("[expo-air] Patched didFinishLaunchingWithOptions for dev launcher registry");
       }
 
       fs.writeFileSync(appDelegatePath, content);
