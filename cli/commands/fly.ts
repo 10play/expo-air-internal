@@ -69,13 +69,9 @@ export async function flyCommand(options: FlyOptions): Promise<void> {
   // Resolve project directory (exit on error for fly command)
   env.resolveProject({ exitOnError: true });
 
-  // Start Metro servers
-  await env.startMetroServers();
-
-  // Start prompt server
-  await env.startPromptServer();
-
-  // Start tunnels
+  // Start tunnels BEFORE Metro so we can pass EXPO_PACKAGER_PROXY_URL.
+  // This ensures Metro constructs bundle URLs using the tunnel hostname
+  // without appending the local port (which Cloudflare tunnels can't serve).
   const tunnelsOk = await env.startTunnels();
   if (!tunnelsOk) {
     env.showRateLimitWarning(true); // Exit on rate limit for fly
@@ -87,8 +83,22 @@ export async function flyCommand(options: FlyOptions): Promise<void> {
     env.showRateLimitWarning(true);
   }
 
-  // Update config files
+  // Update config files (needs tunnel URLs)
   env.updateConfigFiles();
+
+  // Build Metro env with tunnel proxy URL if available
+  const currentTunnelUrls = env.getTunnelUrls();
+  const metroExtraEnv: Record<string, string> = {};
+  if (currentTunnelUrls.appMetro) {
+    metroExtraEnv.EXPO_PACKAGER_PROXY_URL = currentTunnelUrls.appMetro;
+    console.log(chalk.gray(`  Using tunnel as Metro proxy: ${currentTunnelUrls.appMetro}`));
+  }
+
+  // Start Metro servers (with tunnel proxy URL if available)
+  await env.startMetroServers(metroExtraEnv);
+
+  // Start prompt server
+  await env.startPromptServer();
 
   // Update env file with extra tunnel URLs
   env.writeEnvFileWithTunnelUrls();

@@ -251,7 +251,7 @@ export class DevEnvironment {
   /**
    * Start Metro bundler servers
    */
-  async startMetroServers(): Promise<void> {
+  async startMetroServers(extraEnv?: Record<string, string>): Promise<void> {
     console.log(chalk.gray("\n  Starting Metro bundlers..."));
 
     // Start widget Metro server if needed
@@ -262,6 +262,7 @@ export class DevEnvironment {
         cwd: this.state.widgetDir,
         port: this.state.ports.widgetMetro,
         command: this.options.metroCommand,
+        extraEnv,
       });
     } else {
       console.log(chalk.green(`  ✓ Using pre-built widget bundle`));
@@ -273,6 +274,7 @@ export class DevEnvironment {
       cwd: this.state.projectRoot,
       port: this.state.ports.appMetro,
       command: this.options.metroCommand,
+      extraEnv,
     });
   }
 
