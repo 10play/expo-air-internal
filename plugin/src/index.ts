@@ -39,8 +39,8 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
 
       let content = fs.readFileSync(appDelegatePath, "utf-8");
 
-      // Check if already patched (all patches must be present)
-      if (content.includes("ExpoAirBundleURL") && content.includes("ExpoAirSourceURL") && content.includes("ExpoAirProvider")) {
+      // Check if already patched
+      if (content.includes("ExpoAirBundleURL")) {
         return config;
       }
 
@@ -66,63 +66,9 @@ const withAppDelegatePatch: ConfigPlugin = (config) => {
 
       if (bundleURLPattern.test(content)) {
         content = content.replace(bundleURLPattern, patchedBundleURL);
-        console.log("[expo-air] Patched bundleURL() for tunnel support");
+        fs.writeFileSync(appDelegatePath, content);
+        console.log("[expo-air] Patched AppDelegate for tunnel support");
       }
-
-      // Patch sourceURL(for:) to bypass bridge.bundleURL when tunnel is configured.
-      // The dev client sets bridge.bundleURL which creates a malformed URL by combining
-      // the tunnel hostname with the local Metro port. When a tunnel URL is configured,
-      // we call bundleURL() directly which has the correct tunnel logic.
-      const sourceURLPattern =
-        /override func sourceURL\(for bridge: RCTBridge\) -> URL\? \{[\s\S]*?bridge\.bundleURL \?\? bundleURL\(\)[\s\S]*?\}/;
-
-      const patchedSourceURL = `override func sourceURL(for bridge: RCTBridge) -> URL? {
-    // ExpoAirSourceURL: Use tunnel URL when configured, otherwise fall back to dev-client behavior.
-    if let expoAir = Bundle.main.object(forInfoDictionaryKey: "ExpoAir") as? [String: Any],
-       let appMetroUrl = expoAir["appMetroUrl"] as? String,
-       !appMetroUrl.isEmpty {
-      return bundleURL()
-    }
-    return bridge.bundleURL ?? bundleURL()
-  }`;
-
-      if (sourceURLPattern.test(content)) {
-        content = content.replace(sourceURLPattern, patchedSourceURL);
-        console.log("[expo-air] Patched sourceURL(for:) for tunnel support");
-      }
-
-      // Patch application(didFinishLaunchingWithOptions:) to inject the tunnel URL into
-      // the expo-dev-launcher's recently opened apps registry. The dev launcher completely
-      // bypasses AppDelegate's sourceURL/bundleURL and manages its own URL loading.
-      // By registering the tunnel URL as a recently opened app, the dev launcher will
-      // auto-connect to it on startup (it checks recently opened apps after process args).
-      const didFinishPattern =
-        /let delegate = ReactNativeDelegate\(\)/;
-
-      const providerPatch = `// ExpoAirProvider: Register tunnel URL with expo-dev-launcher so it auto-connects.
-    #if DEBUG
-    if let expoAir = Bundle.main.object(forInfoDictionaryKey: "ExpoAir") as? [String: Any],
-       let appMetroUrl = expoAir["appMetroUrl"] as? String,
-       !appMetroUrl.isEmpty {
-      let registryKey = "expo.devlauncher.recentlyopenedapps"
-      let timestamp = Int64(Date().timeIntervalSince1970 * 1000)
-      let entry: [String: Any] = ["timestamp": timestamp, "url": appMetroUrl]
-      var registry = UserDefaults.standard.dictionary(forKey: registryKey) ?? [:]
-      registry[appMetroUrl] = entry
-      UserDefaults.standard.set(registry, forKey: registryKey)
-      print("[expo-air] Registered tunnel URL with dev launcher: \\(appMetroUrl)")
-    }
-    #endif
-
-    let delegate = ReactNativeDelegate()`;
-
-      if (didFinishPattern.test(content)) {
-        content = content.replace(didFinishPattern, providerPatch);
-        console.log("[expo-air] Patched didFinishLaunchingWithOptions for dev launcher registry");
-      }
-
-      fs.writeFileSync(appDelegatePath, content);
-      console.log("[expo-air] Wrote patched AppDelegate");
 
       // Patch bridging header to expose RCTBridge to Swift.
       // The prebuilt React.framework module map doesn't include RCTBridge.h,
