@@ -24,6 +24,7 @@ import {
   updateEnvFile,
   maskSecret,
   appendSecret,
+  patchAppDelegate,
 } from "../utils/common.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -157,7 +158,7 @@ export class DevEnvironment {
       extraTunnels: [],
       envFile: null,
       serverWatcher: null,
-      serverSecret: null,
+      serverSecret: this.options.server ? randomBytes(32).toString("hex") : null,
     };
   }
 
@@ -289,7 +290,6 @@ export class DevEnvironment {
     }
 
     console.log(chalk.gray("\n  Starting prompt server..."));
-    this.state.serverSecret = randomBytes(32).toString("hex");
     const { PromptServer } = await import("../server/promptServer.js");
     this.state.promptServer = new PromptServer(this.state.ports.promptServer, this.state.projectRoot, this.state.serverSecret);
     await this.state.promptServer.start();
@@ -564,6 +564,9 @@ export class DevEnvironment {
 
     // Update Info.plist (iOS)
     const plistUpdated = updateInfoPlist(this.state.projectRoot, localConfig, { silent: true });
+
+    // Patch AppDelegate.swift for tunnel support (idempotent, only patches once)
+    patchAppDelegate(this.state.projectRoot, { silent: true });
 
     // Update AndroidManifest.xml (Android)
     const manifestUpdated = updateAndroidManifest(this.state.projectRoot, localConfig, { silent: true });
