@@ -41,7 +41,7 @@ export async function flyCommand(options: FlyOptions): Promise<void> {
   });
 
   // Select device
-  const selectedDevice = selectDevice(devices, options.device) as ConnectedDevice;
+  const selectedDevice = await selectDevice(devices, options.device) as ConnectedDevice;
   if (options.device && selectedDevice.udid !== options.device && !selectedDevice.name.toLowerCase().includes(options.device.toLowerCase())) {
     console.log(chalk.yellow(`\n  ⚠ Device "${options.device}" not found, using ${selectedDevice.name}`));
   }
