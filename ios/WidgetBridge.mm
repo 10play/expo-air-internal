@@ -3,6 +3,7 @@
 #import <PhotosUI/PhotosUI.h>
 #import <objc/runtime.h>
 #import <React/RCTReloadCommand.h>
+#import <React/RCTLinkingManager.h>
 
 static NSString *saveImageToTemp(UIImage *image, CGFloat quality) {
     NSData *data = UIImageJPEGRepresentation(image, quality);
@@ -108,9 +109,11 @@ RCT_EXPORT_METHOD(expand) {
 }
 
 RCT_EXPORT_METHOD(onActionPress) {
-    NSLog(@"[WidgetBridge] onActionPress called, posting notification");
+    NSLog(@"[WidgetBridge] onActionPress called, dispatching deep link to host app");
     dispatch_async(dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"ExpoAirActionPress" object:nil];
+        NSURL *url = [NSURL URLWithString:@"expo-air-action://action-press"];
+        UIApplication *app = [UIApplication sharedApplication];
+        [RCTLinkingManager application:app openURL:url options:@{}];
     });
 }
 
