@@ -79,7 +79,7 @@ export function Header({ status, branchName, onBranchPress, action, onActionPres
         )}
       </TouchableOpacity>
 
-      {action && (
+      {action?.label ? (
         <TouchableOpacity
           style={styles.actionButton}
           onPress={onActionPress}
@@ -89,7 +89,7 @@ export function Header({ status, branchName, onBranchPress, action, onActionPres
             {action.label}
           </Text>
         </TouchableOpacity>
-      )}
+      ) : null}
 
       <TouchableOpacity
         onLongPress={handleReload}

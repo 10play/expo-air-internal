@@ -103,9 +103,12 @@ public class ExpoAirModule: Module {
       FloatingBubbleManager.shared.reloadWidget(bundleURL: bundleUrl, serverUrl: serverUrlString)
     }
 
-    Function("setAction") { (config: [String: Any]?) in
-      NSLog("[ExpoAirModule] setAction called with config: %@", config?.description ?? "nil")
-      FloatingBubbleManager.shared.updateAction(config)
+    Function("setAction") { (label: String) in
+      if label.isEmpty {
+        FloatingBubbleManager.shared.updateAction(nil)
+      } else {
+        FloatingBubbleManager.shared.updateAction(["label": label])
+      }
     }
 
     Function("getServerUrl") { () -> String in
