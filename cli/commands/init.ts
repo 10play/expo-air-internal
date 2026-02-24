@@ -127,6 +127,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
   const gitignoreEntries = [
     { entry: ".expo-air.local.json", comment: "# expo-air local config (tunnel URLs)" },
     { entry: ".expo-air-images/", comment: "# expo-air temp images" },
+    { entry: ".expo-air-metro.log", comment: "# expo-air metro bundler logs" },
   ];
 
   if (fs.existsSync(gitignorePath)) {
