@@ -115,6 +115,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // Start prompt server (with watch mode)
   await env.startPromptServer();
 
+  // Pipe Metro logs to widget via WebSocket
+  env.pipeMetroLogs();
+
   const ports = env.getPorts();
   const projectRoot = env.getProjectRoot();
 

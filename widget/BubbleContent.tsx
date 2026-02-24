@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, NativeModules, NativeEventEmitter, Platform, To
 import { PromptInput, type PromptInputHandle } from "./components/PromptInput";
 import { ResponseArea } from "./components/ResponseArea";
 import { GitChangesTab } from "./components/GitChangesTab";
+import { MetroLogsTab } from "./components/MetroLogsTab";
 import { BranchSwitcher } from "./components/BranchSwitcher";
 import { Header, PulsingIndicator } from "./components/Header";
 import { TabBar, type TabType } from "./components/TabBar";
@@ -61,6 +62,7 @@ export function BubbleContent({
     status,
     messages,
     currentParts,
+    metroLogs,
     handleSubmit,
     handleNewSession,
     handleStop,
@@ -117,8 +119,10 @@ export function BubbleContent({
           <DisconnectedView />
         ) : activeTab === "chat" ? (
           <ResponseArea messages={messages} currentParts={currentParts} status={status} />
-        ) : (
+        ) : activeTab === "changes" ? (
           <GitChangesTab changes={git.gitChanges} onDiscard={git.handleDiscard} />
+        ) : (
+          <MetroLogsTab logs={metroLogs} />
         )}
       </View>
       {activeTab === "chat" && (

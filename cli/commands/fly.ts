@@ -100,6 +100,9 @@ export async function flyCommand(options: FlyOptions): Promise<void> {
   // Start prompt server
   await env.startPromptServer();
 
+  // Pipe Metro logs to widget via WebSocket
+  env.pipeMetroLogs();
+
   // Update env file with extra tunnel URLs
   env.writeEnvFileWithTunnelUrls();
 

@@ -1154,6 +1154,15 @@ IMPORTANT CONSTRAINTS:
     }
   }
 
+  broadcastMetroLog(source: "widget" | "app", content: string): void {
+    this.broadcastToClients({
+      type: "metro_log",
+      source,
+      content,
+      timestamp: Date.now(),
+    });
+  }
+
   private sendToolUpdate(
     promptId: string,
     toolName: string,
