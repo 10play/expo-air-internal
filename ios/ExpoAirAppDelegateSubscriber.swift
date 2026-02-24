@@ -14,7 +14,6 @@ public class ExpoAirAppDelegateSubscriber: ExpoAppDelegateSubscriber {
     private var widgetMetroUrl: String = ""
 
     public func applicationDidBecomeActive(_ application: UIApplication) {
-        #if DEBUG
         guard !hasShown else { return }
         hasShown = true
 
@@ -25,7 +24,6 @@ public class ExpoAirAppDelegateSubscriber: ExpoAppDelegateSubscriber {
                 self.showBubble()
             }
         }
-        #endif
     }
 
     private func loadConfig() {
