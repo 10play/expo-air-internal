@@ -90,7 +90,7 @@ export interface DevEnvironmentState {
   widgetDir: string;
   widgetProcess: ChildProcess | null;
   appProcess: ChildProcess | null;
-  promptServer: { start: () => Promise<void>; stop: () => Promise<void> } | null;
+  promptServer: { start: () => Promise<void>; stop: () => Promise<void>; appendMetroLog: (source: "widget" | "app", content: string) => void } | null;
   promptTunnel: CloudflareTunnel | null;
   widgetTunnel: CloudflareTunnel | null;
   appTunnel: CloudflareTunnel | null;
@@ -297,6 +297,34 @@ export class DevEnvironment {
     // Start watching for changes if in watch mode
     if (this.options.watchServer) {
       this.startServerWatcher();
+    }
+  }
+
+  /**
+   * Pipe Metro process stdout/stderr into the prompt server's log buffer
+   * so the agent has access to recent Metro output.
+   */
+  pipeMetroLogs(): void {
+    if (!this.state.promptServer) return;
+
+    const server = this.state.promptServer;
+
+    if (this.state.widgetProcess) {
+      this.state.widgetProcess.stdout?.on("data", (data: Buffer) => {
+        server.appendMetroLog("widget", data.toString());
+      });
+      this.state.widgetProcess.stderr?.on("data", (data: Buffer) => {
+        server.appendMetroLog("widget", data.toString());
+      });
+    }
+
+    if (this.state.appProcess) {
+      this.state.appProcess.stdout?.on("data", (data: Buffer) => {
+        server.appendMetroLog("app", data.toString());
+      });
+      this.state.appProcess.stderr?.on("data", (data: Buffer) => {
+        server.appendMetroLog("app", data.toString());
+      });
     }
   }
 

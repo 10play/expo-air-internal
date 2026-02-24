@@ -40,6 +40,9 @@ export async function startCommand(options: StartOptions): Promise<void> {
   // Start prompt server
   await env.startPromptServer();
 
+  // Pipe Metro logs to widget via WebSocket
+  env.pipeMetroLogs();
+
   // Start tunnels
   const tunnelsOk = await env.startTunnels();
   if (!tunnelsOk) {

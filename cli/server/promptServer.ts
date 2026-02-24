@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { type Server as HttpServer } from "http";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, copyFileSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, copyFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 import { GitOperations } from "./gitOperations.js";
@@ -40,12 +40,18 @@ export class PromptServer {
   private secret: string | null = null;
   private activePromptId: string | null = null;
   private git: GitOperations;
+  private metroLogFile: string;
+  private metroLogLineCount = 0;
+  private static readonly MAX_METRO_LOG_LINES = 1000;
 
   constructor(port: number, projectRoot?: string, secret?: string | null) {
     this.port = port;
     this.projectRoot = projectRoot || process.cwd();
     this.secret = secret ?? null;
     this.git = new GitOperations(this.projectRoot);
+    this.metroLogFile = join(this.projectRoot, ".expo-air-metro.log");
+    // Start fresh
+    writeFileSync(this.metroLogFile, "");
     this.loadSession();
   }
 
@@ -947,7 +953,12 @@ IMPORTANT CONSTRAINTS:
 - DO NOT add new npm/yarn packages unless the user EXPLICITLY asks for it
 - Adding new packages requires the developer to completely reset and rebuild the native app, which is a slow and disruptive process
 - If a feature could be implemented with existing packages or vanilla JavaScript/TypeScript, prefer that approach
-- If a new package is truly necessary, clearly warn the user that adding it will require a full app rebuild`,
+- If a new package is truly necessary, clearly warn the user that adding it will require a full app rebuild
+
+METRO BUNDLER LOGS:
+- Recent Metro bundler logs are written to .expo-air-metro.log in the project root
+- Use the Read tool to view this file when diagnosing build errors, bundle failures, or runtime issues
+- The file is cleared periodically so it only contains recent output`,
           },
           tools: {
             type: "preset",
@@ -1151,6 +1162,21 @@ IMPORTANT CONSTRAINTS:
   private broadcastToClients(message: OutgoingMessage): void {
     for (const client of this.clients) {
       this.sendToClient(client, message);
+    }
+  }
+
+  appendMetroLog(source: "widget" | "app", content: string): void {
+    const lines = content.split("\n").filter((l) => l.length > 0);
+    if (lines.length === 0) return;
+
+    const formatted = lines.map((l) => `[${source}] ${l}`).join("\n") + "\n";
+    appendFileSync(this.metroLogFile, formatted);
+    this.metroLogLineCount += lines.length;
+
+    // Clear file when it exceeds max lines
+    if (this.metroLogLineCount >= PromptServer.MAX_METRO_LOG_LINES) {
+      writeFileSync(this.metroLogFile, "");
+      this.metroLogLineCount = 0;
     }
   }
 
