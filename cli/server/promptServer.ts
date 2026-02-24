@@ -954,6 +954,7 @@ IMPORTANT CONSTRAINTS:
 - Adding new packages requires the developer to completely reset and rebuild the native app, which is a slow and disruptive process
 - If a feature could be implemented with existing packages or vanilla JavaScript/TypeScript, prefer that approach
 - If a new package is truly necessary, clearly warn the user that adding it will require a full app rebuild
+- EXPO MODULES: Many Expo modules (e.g. expo-camera, expo-location, expo-sensors, etc.) are already installed natively on the host app. However, you still need to add them to package.json so that Metro can resolve them at bundle time. Use "bun add <package>" to add them — this will NOT require a native rebuild since the native code is already present
 
 METRO BUNDLER LOGS:
 - Recent Metro bundler logs are written to .expo-air-metro.log in the project root
