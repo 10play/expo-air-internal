@@ -8,7 +8,6 @@ import {
   type AssistantPartsMessage,
   type AnyConversationEntry,
   type ImageAttachment,
-  type MetroLogMessage,
 } from "../services/websocket";
 interface UseWebSocketMessagesOptions {
   serverUrl: string;
@@ -19,7 +18,6 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [messages, setMessages] = useState<ServerMessage[]>([]);
   const [currentParts, setCurrentParts] = useState<AssistantPart[]>([]);
-  const [metroLogs, setMetroLogs] = useState<MetroLogMessage[]>([]);
 
   const currentPartsRef = useRef<AssistantPart[]>([]);
   const currentPromptIdRef = useRef<string | null>(null);
@@ -215,9 +213,6 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
         setMessages(historyMessages);
         break;
       }
-      case "metro_log":
-        setMetroLogs((prev) => [...prev, message]);
-        break;
       // Delegate git messages to the git state hook
       case "git_status":
       case "branches_list":
@@ -293,7 +288,6 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
     status,
     messages,
     currentParts,
-    metroLogs,
     handleSubmit,
     handleNewSession,
     handleStop,

@@ -5,7 +5,7 @@ import { SPACING, LAYOUT, COLORS, TYPOGRAPHY, SIZES } from "../constants/design"
 // Typed animated components for React 19 compatibility
 const AnimatedText = Animated.Text as React.ComponentClass<Animated.AnimatedProps<TextProps>>;
 
-export type TabType = "chat" | "changes" | "logs";
+export type TabType = "chat" | "changes";
 
 interface TabBarProps {
   activeTab: TabType;
@@ -76,14 +76,6 @@ export function TabBar({
             activeTab === "changes" ? styles.tabTextActive : styles.tabTextInactive
           ]}>
             Changes
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => onTabChange("logs")}>
-          <Text style={[
-            styles.tabText,
-            activeTab === "logs" ? styles.tabTextActive : styles.tabTextInactive
-          ]}>
-            Logs
           </Text>
         </TouchableOpacity>
       </View>

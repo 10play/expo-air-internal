@@ -196,13 +196,6 @@ export interface GitStatusMessage {
   timestamp: number;
 }
 
-export interface MetroLogMessage {
-  type: "metro_log";
-  source: "widget" | "app";
-  content: string;
-  timestamp: number;
-}
-
 export type ServerMessage =
   | StreamMessage
   | ToolMessage
@@ -219,8 +212,7 @@ export type ServerMessage =
   | AssistantPartsMessage
   | BranchesListMessage
   | BranchSwitchedMessage
-  | BranchCreatedMessage
-  | MetroLogMessage;
+  | BranchCreatedMessage;
 
 export interface WebSocketClientOptions {
   url: string;

@@ -40,6 +40,8 @@ export class PromptServer {
   private secret: string | null = null;
   private activePromptId: string | null = null;
   private git: GitOperations;
+  private metroLogBuffer: string[] = [];
+  private static readonly MAX_METRO_LOG_LINES = 200;
 
   constructor(port: number, projectRoot?: string, secret?: string | null) {
     this.port = port;
@@ -947,7 +949,7 @@ IMPORTANT CONSTRAINTS:
 - DO NOT add new npm/yarn packages unless the user EXPLICITLY asks for it
 - Adding new packages requires the developer to completely reset and rebuild the native app, which is a slow and disruptive process
 - If a feature could be implemented with existing packages or vanilla JavaScript/TypeScript, prefer that approach
-- If a new package is truly necessary, clearly warn the user that adding it will require a full app rebuild`,
+- If a new package is truly necessary, clearly warn the user that adding it will require a full app rebuild${this.getMetroLogsContext()}`,
           },
           tools: {
             type: "preset",
@@ -1154,13 +1156,25 @@ IMPORTANT CONSTRAINTS:
     }
   }
 
-  broadcastMetroLog(source: "widget" | "app", content: string): void {
-    this.broadcastToClients({
-      type: "metro_log",
-      source,
-      content,
-      timestamp: Date.now(),
-    });
+  appendMetroLog(source: "widget" | "app", content: string): void {
+    const lines = content.split("\n").filter((l) => l.length > 0);
+    for (const line of lines) {
+      this.metroLogBuffer.push(`[${source}] ${line}`);
+    }
+    // Trim to max size
+    if (this.metroLogBuffer.length > PromptServer.MAX_METRO_LOG_LINES) {
+      this.metroLogBuffer = this.metroLogBuffer.slice(-PromptServer.MAX_METRO_LOG_LINES);
+    }
+  }
+
+  getMetroLogs(): string {
+    return this.metroLogBuffer.join("\n");
+  }
+
+  private getMetroLogsContext(): string {
+    const logs = this.getMetroLogs();
+    if (!logs) return "";
+    return `\n\nRECENT METRO BUNDLER LOGS:\nThese are the recent logs from the Metro bundler. Use them to diagnose build errors, warnings, or runtime issues.\n\`\`\`\n${logs}\n\`\`\``;
   }
 
   private sendToolUpdate(
