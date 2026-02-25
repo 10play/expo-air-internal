@@ -60,6 +60,7 @@ program
   .option("-p, --port <port>", "Port for prompt server", "3847")
   .option("--project <path>", "Path to Expo project (where Claude makes changes)")
   .option("--pipe-metro", "Read Metro output from stdin and write to .expo-air-metro.log with rotation")
+  .option("-m, --metro-port <port>", "Port for main app Metro server (used by CLI tools MCP)", "8081")
   .action(serverCommand);
 
 program

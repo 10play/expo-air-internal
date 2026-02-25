@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
 import { appendSecret } from "../utils/common.js";
+import { createCliToolsMcpServer } from "../server/cliToolsMcp.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,7 @@ interface ServerOptions {
   port: string;
   project?: string;
   pipeMetro?: boolean;
+  metroPort?: string;
 }
 
 export async function serverCommand(options: ServerOptions): Promise<void> {
@@ -37,8 +39,54 @@ export async function serverCommand(options: ServerOptions): Promise<void> {
   const { PromptServer } = await import("../server/promptServer.js");
   const server = new PromptServer(port, projectRoot, secret);
   await server.start();
+
+  // Attach CLI tools MCP server (restart_metro, force_refresh, screenshot_app)
+  const metroPort = parseInt(options.metroPort ?? "8081", 10);
+  const mcpServer = createCliToolsMcpServer({
+    restartMetro: async (opts) => {
+      // Metro is an upstream process piping into us — we can't restart its process,
+      // but we can trigger a full reload via the Metro message socket.
+      const { WebSocket } = await import("ws");
+      return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://localhost:${metroPort}/message`);
+        const timeout = setTimeout(() => { ws.close(); reject(new Error("Reload timed out")); }, 5000);
+        ws.on("open", () => {
+          ws.send(JSON.stringify({ version: 2, method: "reload" }));
+          clearTimeout(timeout);
+          ws.close();
+          const cleared = opts?.clearCache ? " (note: cache clear requires a process restart — reload sent instead)" : "";
+          resolve(`Full reload broadcast sent via Metro message socket on port ${metroPort}${cleared}`);
+        });
+        ws.on("error", (err: Error) => {
+          clearTimeout(timeout);
+          reject(new Error(`Could not reach Metro message socket on port ${metroPort}: ${err.message}`));
+        });
+      });
+    },
+    forceRefresh: async () => {
+      const { WebSocket } = await import("ws");
+      return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://localhost:${metroPort}/message`);
+        const timeout = setTimeout(() => { ws.close(); reject(new Error("Reload timed out")); }, 5000);
+        ws.on("open", () => {
+          ws.send(JSON.stringify({ version: 2, method: "reload" }));
+          clearTimeout(timeout);
+          ws.close();
+          resolve(`Full reload broadcast sent via message socket on port ${metroPort}`);
+        });
+        ws.on("error", (err: Error) => {
+          clearTimeout(timeout);
+          reject(new Error(`Could not reach Metro message socket on port ${metroPort}: ${err.message}`));
+        });
+      });
+    },
+    screenshotApp: () => server.requestScreenshot(),
+  });
+  server.setMcpServer(mcpServer);
+
   console.log(chalk.green(`  ✓ Prompt server started on port ${port} (authenticated)`));
   console.log(chalk.gray(`    Project root: ${projectRoot}`));
+  console.log(chalk.green(`  ✓ CLI tools MCP attached (metro port: ${metroPort})`));
 
   console.log(chalk.gray("\n  ─────────────────────────────────────────────"));
   console.log(chalk.white(`    WebSocket URL: ${appendSecret(`ws://localhost:${port}`, secret)}`));
