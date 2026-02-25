@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 interface ServerOptions {
   port: string;
   project?: string;
+  pipeMetro?: boolean;
 }
 
 export async function serverCommand(options: ServerOptions): Promise<void> {
@@ -43,6 +44,16 @@ export async function serverCommand(options: ServerOptions): Promise<void> {
   console.log(chalk.white(`    WebSocket URL: ${appendSecret(`ws://localhost:${port}`, secret)}`));
   console.log(chalk.gray("  ─────────────────────────────────────────────"));
   console.log(chalk.yellow("\n  Waiting for prompts... (Ctrl+C to stop)\n"));
+
+  // When --pipe-metro is set, read Metro output from stdin and pipe through
+  // appendMetroLog so the agent can read logs with proper rotation.
+  if (options.pipeMetro) {
+    console.log(chalk.gray("  Piping stdin → Metro logs (.expo-air-metro.log)\n"));
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (data: string) => {
+      server.appendMetroLog("app", data);
+    });
+  }
 
   // Handle graceful shutdown
   const shutdown = async () => {
