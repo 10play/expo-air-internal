@@ -20,13 +20,17 @@ export interface StartMetroOptions {
   timeout?: number;
   /** Extra environment variables to pass to the Metro process */
   extraEnv?: Record<string, string>;
+  /** Pass --clear to Metro to reset the bundler cache */
+  clearCache?: boolean;
+  /** Called with stdout/stderr output as it arrives (from the moment the process spawns) */
+  onOutput?: (data: string) => void;
 }
 
 /**
  * Start a Metro bundler server
  */
 export async function startMetro(options: StartMetroOptions): Promise<ChildProcess | null> {
-  const { name, cwd, port, command = "run-script", timeout = 30000, extraEnv = {} } = options;
+  const { name, cwd, port, command = "run-script", timeout = 30000, extraEnv = {}, clearCache = false, onOutput } = options;
 
   const pm = detectPackageManager(cwd);
 
@@ -34,7 +38,9 @@ export async function startMetro(options: StartMetroOptions): Promise<ChildProce
     let proc: ChildProcess;
 
     if (command === "run-script") {
-      const run = getRunScriptCommand(pm, "start", ["--port", String(port)]);
+      const extraArgs = ["--port", String(port)];
+      if (clearCache) extraArgs.push("--clear");
+      const run = getRunScriptCommand(pm, "start", extraArgs);
       proc = spawn(run.cmd, run.args, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
@@ -42,7 +48,9 @@ export async function startMetro(options: StartMetroOptions): Promise<ChildProce
       });
     } else {
       const exec = getExecCommand(pm);
-      proc = spawn(exec.cmd, [...exec.args, "expo", "start", "--port", String(port)], {
+      const execArgs = [...exec.args, "expo", "start", "--port", String(port)];
+      if (clearCache) execArgs.push("--clear");
+      proc = spawn(exec.cmd, execArgs, {
         cwd,
         stdio: ["ignore", "pipe", "pipe"],
         env: {
@@ -52,6 +60,12 @@ export async function startMetro(options: StartMetroOptions): Promise<ChildProce
           ...extraEnv,
         },
       });
+    }
+
+    // Forward all output to caller from the moment the process spawns
+    if (onOutput) {
+      proc.stdout?.on("data", (data: Buffer) => onOutput(data.toString()));
+      proc.stderr?.on("data", (data: Buffer) => onOutput(data.toString()));
     }
 
     // Wait for initial Metro output

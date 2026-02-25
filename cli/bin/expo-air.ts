@@ -1,5 +1,14 @@
 #!/usr/bin/env node
 
+// Catch unhandled rejections from SDK internals (e.g. MCP control request
+// write after abort) so they log a clean message instead of dumping minified
+// source and crashing the process.
+process.on("unhandledRejection", (reason) => {
+  // Abort errors are expected during query cancellation — ignore silently
+  if (reason instanceof Error && reason.message === "Operation aborted") return;
+  console.error("[unhandled rejection]", reason);
+});
+
 import { Command } from "commander";
 import { fileURLToPath } from "url";
 import * as path from "path";

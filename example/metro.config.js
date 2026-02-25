@@ -9,10 +9,14 @@ const config = getDefaultConfig(__dirname);
 // excludes the one from the parent folder when bundling.
 config.resolver.blockList = [
   ...Array.from(config.resolver.blockList ?? []),
-  new RegExp(path.resolve('..', 'node_modules', 'react')),
-  new RegExp(path.resolve('..', 'node_modules', 'react-native')),
+  new RegExp(path.resolve('..', 'node_modules', 'react') + '(/|$)'),
+  new RegExp(path.resolve('..', 'node_modules', 'react-native') + '(/|$)'),
   new RegExp(path.resolve('..', 'widget') + '/.*'),
   new RegExp(path.resolve('..', '.expo-air-images') + '/.*'),
+  // Block the circular symlink: node_modules/@10play/expo-air points back to the repo root,
+  // which contains example/ again, creating infinite recursion. We use extraNodeModules instead.
+  new RegExp(path.resolve(__dirname, 'node_modules', '@10play', 'expo-air', 'example')),
+  new RegExp(path.resolve(__dirname, 'node_modules', '@10play', '\\.expo-air-')),
 ];
 
 config.resolver.nodeModulesPaths = [

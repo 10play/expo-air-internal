@@ -300,6 +300,9 @@ export class DevEnvironment {
     this.attachMcpServer();
     console.log(chalk.green(`  ✓ Prompt server started on port ${this.state.ports.promptServer} (authenticated)`));
 
+    // Copy skill files to project's .claude/commands/ so settingSources: ["project"] picks them up
+    this.copySkillFiles();
+
     // Start watching for changes if in watch mode
     if (this.options.watchServer) {
       this.startServerWatcher();
@@ -337,50 +340,50 @@ export class DevEnvironment {
   /**
    * Restart the app Metro bundler process
    */
-  async restartAppMetro(): Promise<string> {
+  async restartAppMetro(options?: { clearCache?: boolean }): Promise<string> {
     // Kill existing app process
     if (this.state.appProcess?.pid) {
       await killProcessTree(this.state.appProcess.pid);
     }
 
-    // Respawn Metro with the same options
+    // Respawn Metro with the same options, piping logs from the start
+    const server = this.state.promptServer;
     this.state.appProcess = await startMetro({
       name: "App",
       cwd: this.state.projectRoot,
       port: this.state.ports.appMetro,
       command: this.options.metroCommand,
       extraEnv: this.state.metroExtraEnv,
+      clearCache: options?.clearCache,
+      onOutput: server ? (data) => server.appendMetroLog("app", data) : undefined,
     });
 
-    // Re-pipe logs to prompt server
-    if (this.state.promptServer && this.state.appProcess) {
-      const server = this.state.promptServer;
-      this.state.appProcess.stdout?.on("data", (data: Buffer) => {
-        server.appendMetroLog("app", data.toString());
-      });
-      this.state.appProcess.stderr?.on("data", (data: Buffer) => {
-        server.appendMetroLog("app", data.toString());
-      });
-    }
-
-    return `Metro bundler restarted on port ${this.state.ports.appMetro}`;
+    const cleared = options?.clearCache ? " with cache cleared" : "";
+    return `Metro bundler restarted on port ${this.state.ports.appMetro}${cleared}`;
   }
 
   /**
-   * Force the app to reload the JS bundle via Metro's /reload endpoint
+   * Force a full reload of the app via Metro's message socket.
+   * Sends a broadcast "reload" message (protocol version 2) which the native
+   * runtime handles by tearing down and re-executing the JS bundle.
    */
   async forceRefreshApp(): Promise<string> {
     const port = this.state.ports.appMetro;
+    const { WebSocket } = await import("ws");
+
     return new Promise((resolve, reject) => {
-      const req = http.get(`http://localhost:${port}/reload`, (res) => {
-        resolve(`Reload triggered on Metro port ${port} (status ${res.statusCode})`);
+      const ws = new WebSocket(`ws://localhost:${port}/message`);
+      const timeout = setTimeout(() => { ws.close(); reject(new Error("Reload timed out")); }, 5000);
+
+      ws.on("open", () => {
+        ws.send(JSON.stringify({ version: 2, method: "reload" }));
+        clearTimeout(timeout);
+        ws.close();
+        resolve(`Full reload broadcast sent via message socket on port ${port}`);
       });
-      req.on("error", (err) => {
-        reject(new Error(`Could not reach Metro on port ${port}: ${err.message}`));
-      });
-      req.setTimeout(5000, () => {
-        req.destroy();
-        reject(new Error(`Reload request to Metro on port ${port} timed out`));
+      ws.on("error", (err: Error) => {
+        clearTimeout(timeout);
+        reject(new Error(`Could not reach Metro message socket on port ${port}: ${err.message}`));
       });
     });
   }
@@ -392,7 +395,7 @@ export class DevEnvironment {
     if (!this.state.promptServer) return;
 
     const mcpServer = createCliToolsMcpServer({
-      restartMetro: () => this.restartAppMetro(),
+      restartMetro: (opts) => this.restartAppMetro(opts),
       forceRefresh: () => this.forceRefreshApp(),
       screenshotApp: () => this.state.promptServer!.requestScreenshot(),
     });
@@ -456,6 +459,9 @@ export class DevEnvironment {
           this.state.promptServer = newServer;
           this.attachMcpServer();
 
+          // Re-copy skill files in case project was reset
+          this.copySkillFiles();
+
           console.log(chalk.green(`  ✓ Prompt server restarted successfully`));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -465,6 +471,30 @@ export class DevEnvironment {
         isRestarting = false;
       }, 300); // 300ms debounce
     });
+  }
+
+  /**
+   * Copy skill files from the package to the project's .claude/commands/ directory
+   */
+  private copySkillFiles(): void {
+    const packageRoot = getPackageRoot();
+    const skillsDir = path.join(packageRoot, "cli", "skills");
+    const destDir = path.join(this.state.projectRoot, ".claude", "commands");
+
+    if (!fs.existsSync(skillsDir)) return;
+
+    fs.mkdirSync(destDir, { recursive: true });
+
+    const files = fs.readdirSync(skillsDir).filter((f) => f.endsWith(".md"));
+    for (const file of files) {
+      const src = path.join(skillsDir, file);
+      const dest = path.join(destDir, file);
+      fs.copyFileSync(src, dest);
+    }
+
+    if (files.length > 0) {
+      console.log(chalk.green(`  ✓ Copied ${files.length} skill(s) to .claude/commands/`));
+    }
   }
 
   /**

@@ -317,13 +317,19 @@ export class PromptServer {
         if (!existsSync(filePath) && this.projectRoot !== gitRoot) {
           filePath = join(this.projectRoot, change.file);
         }
-        if (existsSync(filePath)) {
-          const content = readFileSync(filePath);
-          writeFileSync(filePath, content); // Same content, new mtime → Metro re-pushes HMR
-          touched++;
-        } else {
+        // Only touch files inside the project root — files outside (e.g. cli/)
+        // are not relevant to Metro and touching them can trigger unrelated watchers
+        const resolvedPath = existsSync(filePath) ? filePath : null;
+        if (!resolvedPath) {
           this.log(`HMR retrigger: skipped ${change.file} (not found at ${filePath})`, "info");
+          continue;
         }
+        if (!resolvedPath.startsWith(this.projectRoot)) {
+          continue;
+        }
+        const content = readFileSync(resolvedPath);
+        writeFileSync(resolvedPath, content); // Same content, new mtime → Metro re-pushes HMR
+        touched++;
       } catch (e) {
         this.log(`HMR retrigger: failed to re-touch ${change.file}: ${e}`, "error");
       }
@@ -1027,10 +1033,8 @@ export class PromptServer {
 IMPORTANT CONSTRAINTS:
 - This environment uses Expo's Over-The-Air (OTA) updates for rapid iteration
 - DO NOT add new npm/yarn packages unless the user EXPLICITLY asks for it
-- Adding new packages requires the developer to completely reset and rebuild the native app, which is a slow and disruptive process
 - If a feature could be implemented with existing packages or vanilla JavaScript/TypeScript, prefer that approach
-- If a new package is truly necessary, clearly warn the user that adding it will require a full app rebuild
-- EXPO MODULES: Many Expo modules (e.g. expo-camera, expo-location, expo-sensors, etc.) are already installed natively on the host app. However, you still need to add them to package.json so that Metro can resolve them at bundle time. Use "bun add <package>" to add them — this will NOT require a native rebuild since the native code is already present
+- When the user asks to install a package, use the /install-dep skill (e.g. "/install-dep lodash"). It validates whether the package is safe to install (JS-only or pre-compiled in the host app), runs "bun add", and restarts Metro automatically
 
 METRO BUNDLER LOGS:
 - Recent Metro bundler logs are written to .expo-air-metro.log in the project root

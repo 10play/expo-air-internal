@@ -46,3 +46,6 @@ yarn-error.*
 # expo-air runtime files
 .expo-air-metro.log
 .expo-air-images/
+
+# expo-air auto-copied skill files
+.claude/commands/install-dep.md

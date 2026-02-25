@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod/v4";
 
 export interface CliToolCallbacks {
-  restartMetro?: () => Promise<string>;
+  restartMetro?: (options?: { clearCache?: boolean }) => Promise<string>;
   forceRefresh?: () => Promise<string>;
   screenshotApp?: () => Promise<string>;
 }
@@ -14,9 +14,9 @@ export function createCliToolsMcpServer(callbacks: CliToolCallbacks) {
     tools: [
       tool(
         "restart_metro",
-        "Restart the Metro bundler process. Use this when Metro is stuck, has stale cache, or needs a config reload.",
-        {},
-        async () => {
+        "Restart the Metro bundler process. Use this when Metro is stuck, has stale cache, or needs a config reload. Set clear_cache to true to pass --clear and wipe the Metro cache.",
+        { clear_cache: z.boolean().optional().describe("Pass --clear to Metro to reset the bundler cache. Use when you see stale module errors or dependency resolution failures.") },
+        async ({ clear_cache }) => {
           if (!callbacks.restartMetro) {
             return {
               content: [{ type: "text" as const, text: "restart_metro is not available in this environment" }],
@@ -24,7 +24,7 @@ export function createCliToolsMcpServer(callbacks: CliToolCallbacks) {
             };
           }
           try {
-            const result = await callbacks.restartMetro();
+            const result = await callbacks.restartMetro({ clearCache: clear_cache });
             return {
               content: [{ type: "text" as const, text: result }],
             };
@@ -39,7 +39,7 @@ export function createCliToolsMcpServer(callbacks: CliToolCallbacks) {
       ),
       tool(
         "force_refresh",
-        "Force the app to reload the JavaScript bundle from Metro. Use this after making code changes to ensure the app picks them up immediately.",
+        "Force a full reload of the app — completely re-fetches and re-executes the JavaScript bundle from Metro. Use this after making code changes when HMR/Fast Refresh doesn't pick them up.",
         {},
         async () => {
           if (!callbacks.forceRefresh) {
