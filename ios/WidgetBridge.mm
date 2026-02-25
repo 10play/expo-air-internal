@@ -117,6 +117,47 @@ RCT_EXPORT_METHOD(onActionPress) {
     });
 }
 
+RCT_EXPORT_METHOD(captureAppScreen:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // Find the main app window (not the FloatingBubbleWindow overlay)
+        UIWindow *mainWindow = nil;
+        for (UIScene *scene in [UIApplication.sharedApplication connectedScenes]) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            for (UIWindow *window in windowScene.windows) {
+                NSString *className = NSStringFromClass([window class]);
+                if (![className containsString:@"FloatingBubble"]) {
+                    mainWindow = window;
+                    break;
+                }
+            }
+            if (mainWindow) break;
+        }
+
+        if (!mainWindow) {
+            reject(@"NO_WINDOW", @"Could not find main app window", nil);
+            return;
+        }
+
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:mainWindow.bounds.size];
+        UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+            [mainWindow drawViewHierarchyInRect:mainWindow.bounds afterScreenUpdates:YES];
+        }];
+
+        NSString *path = saveImageToTemp(image, 0.8);
+        if (path) {
+            resolve(@{
+                @"uri": path,
+                @"width": @(image.size.width),
+                @"height": @(image.size.height),
+            });
+        } else {
+            reject(@"SAVE_FAILED", @"Failed to save screenshot", nil);
+        }
+    });
+}
+
 RCT_EXPORT_METHOD(pickImages:(int)selectionLimit
                   quality:(double)quality
                   resolver:(RCTPromiseResolveBlock)resolve

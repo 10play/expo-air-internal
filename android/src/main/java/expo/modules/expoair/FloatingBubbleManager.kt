@@ -19,6 +19,8 @@ object FloatingBubbleManager {
     private var widgetRuntime: WidgetRuntime? = null
     private var activityRef: WeakReference<Activity>? = null
 
+    fun getBubbleView(): FloatingBubbleView? = bubbleView
+
     private var currentSize: Double = 60.0
     private var currentColor: String = "#000000"
     private var currentExpanded: Boolean = false

@@ -173,6 +173,19 @@ export interface HistoryMessage {
   timestamp: number;
 }
 
+export interface ScreenshotRequestMessage {
+  type: "screenshot_request";
+  requestId: string;
+  timestamp: number;
+}
+
+export interface ScreenshotResponseMessage {
+  type: "screenshot_response";
+  requestId: string;
+  imagePaths?: string[];
+  error?: string;
+}
+
 export type OutgoingMessage =
   | StreamMessage
   | ToolMessage
@@ -185,7 +198,8 @@ export type OutgoingMessage =
   | GitStatusMessage
   | BranchesListMessage
   | BranchSwitchedMessage
-  | BranchCreatedMessage;
+  | BranchCreatedMessage
+  | ScreenshotRequestMessage;
 
 export type IncomingMessage =
   | PromptMessage
@@ -194,4 +208,5 @@ export type IncomingMessage =
   | DiscardChangesMessage
   | ListBranchesMessage
   | SwitchBranchMessage
-  | CreateBranchMessage;
+  | CreateBranchMessage
+  | ScreenshotResponseMessage;

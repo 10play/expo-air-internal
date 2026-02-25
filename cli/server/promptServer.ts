@@ -1,7 +1,7 @@
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { type Server as HttpServer } from "http";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "crypto";
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, copyFileSync } from "fs";
 import { join } from "path";
@@ -15,6 +15,7 @@ import type {
   ListBranchesMessage,
   SwitchBranchMessage,
   CreateBranchMessage,
+  ScreenshotResponseMessage,
   OutgoingMessage,
   AnyConversationEntry,
   ToolConversationEntry,
@@ -43,6 +44,8 @@ export class PromptServer {
   private metroLogFile: string;
   private metroLogLineCount = 0;
   private static readonly MAX_METRO_LOG_LINES = 1000;
+  private mcpServer: McpSdkServerConfigWithInstance | null = null;
+  private screenshotRequests = new Map<string, { resolve: (path: string) => void; reject: (err: Error) => void }>();
 
   constructor(port: number, projectRoot?: string, secret?: string | null) {
     this.port = port;
@@ -53,6 +56,44 @@ export class PromptServer {
     // Start fresh
     writeFileSync(this.metroLogFile, "");
     this.loadSession();
+  }
+
+  setMcpServer(server: McpSdkServerConfigWithInstance): void {
+    this.mcpServer = server;
+  }
+
+  requestScreenshot(): Promise<string> {
+    if (this.clients.size === 0) {
+      return Promise.reject(new Error("No device connected"));
+    }
+
+    const requestId = randomUUID();
+
+    return new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.screenshotRequests.delete(requestId);
+        reject(new Error("Screenshot request timed out (15s)"));
+      }, 15000);
+
+      this.screenshotRequests.set(requestId, {
+        resolve: (path) => {
+          clearTimeout(timeout);
+          this.screenshotRequests.delete(requestId);
+          resolve(path);
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          this.screenshotRequests.delete(requestId);
+          reject(err);
+        },
+      });
+
+      this.broadcastToClients({
+        type: "screenshot_request",
+        requestId,
+        timestamp: Date.now(),
+      });
+    });
   }
 
   private getImageDir(): string {
@@ -724,6 +765,12 @@ export class PromptServer {
       return;
     }
 
+    // Handle screenshot response from widget
+    if (this.isScreenshotResponseMessage(message)) {
+      this.handleScreenshotResponse(message);
+      return;
+    }
+
     // Handle prompt message
     if (this.isPromptMessage(message)) {
       const promptId = message.id || randomUUID();
@@ -891,6 +938,35 @@ export class PromptServer {
     );
   }
 
+  private isScreenshotResponseMessage(message: unknown): message is ScreenshotResponseMessage {
+    return (
+      typeof message === "object" &&
+      message !== null &&
+      "type" in message &&
+      (message as ScreenshotResponseMessage).type === "screenshot_response" &&
+      "requestId" in message
+    );
+  }
+
+  private handleScreenshotResponse(message: ScreenshotResponseMessage): void {
+    const pending = this.screenshotRequests.get(message.requestId);
+    if (!pending) return;
+
+    if (message.error) {
+      pending.reject(new Error(message.error));
+    } else if (message.imagePaths && message.imagePaths.length > 0) {
+      // Persist the uploaded image to a stable location
+      const persisted = this.persistImages(message.imagePaths);
+      if (persisted.length > 0) {
+        pending.resolve(`Screenshot saved to: ${persisted[0]}`);
+      } else {
+        pending.reject(new Error("Failed to persist screenshot image"));
+      }
+    } else {
+      pending.reject(new Error("No screenshot image received"));
+    }
+  }
+
   private async executeWithSDK(
     promptId: string,
     content: string,
@@ -965,6 +1041,8 @@ METRO BUNDLER LOGS:
             type: "preset",
             preset: "claude_code",
           },
+          // Attach in-process MCP server if available
+          ...(this.mcpServer && { mcpServers: { "cli-tools": this.mcpServer } }),
           // Resume existing session if we have one
           ...(this.sessionId && { resume: this.sessionId }),
           // Hook into tool usage for real-time updates

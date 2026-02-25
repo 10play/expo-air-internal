@@ -3,8 +3,13 @@ package expo.modules.expoair
 import android.content.ClipData
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -12,6 +17,7 @@ import androidx.core.view.ContentInfoCompat
 import androidx.core.view.OnReceiveContentListener
 import androidx.core.view.ViewCompat
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -61,6 +67,62 @@ class WidgetBridge(private val reactContext: ReactApplicationContext) : ReactCon
             Log.d(TAG, "Main app reload triggered")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to reload main app", e)
+        }
+    }
+
+    @ReactMethod
+    fun captureAppScreen(promise: Promise) {
+        val activity = reactContext.currentActivity
+        if (activity == null) {
+            promise.reject("NO_ACTIVITY", "No activity available")
+            return
+        }
+        activity.runOnUiThread {
+            try {
+                val bubbleView = FloatingBubbleManager.getBubbleView()
+                // Temporarily hide bubble to exclude it from capture
+                bubbleView?.visibility = View.INVISIBLE
+
+                val window = activity.window
+                val decorView = window.decorView
+                val bitmap = Bitmap.createBitmap(decorView.width, decorView.height, Bitmap.Config.ARGB_8888)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    PixelCopy.request(window, bitmap, { result ->
+                        bubbleView?.visibility = View.VISIBLE
+                        if (result == PixelCopy.SUCCESS) {
+                            saveBitmapAndResolve(bitmap, promise)
+                        } else {
+                            promise.reject("CAPTURE_FAILED", "PixelCopy failed with code $result")
+                        }
+                    }, Handler(Looper.getMainLooper()))
+                } else {
+                    decorView.draw(Canvas(bitmap))
+                    bubbleView?.visibility = View.VISIBLE
+                    saveBitmapAndResolve(bitmap, promise)
+                }
+            } catch (e: Exception) {
+                promise.reject("CAPTURE_FAILED", e.message)
+            }
+        }
+    }
+
+    private fun saveBitmapAndResolve(bitmap: Bitmap, promise: Promise) {
+        try {
+            val tempDir = File(reactContext.cacheDir, "expo-air-screenshots")
+            tempDir.mkdirs()
+            val tempFile = File(tempDir, "screenshot_${System.currentTimeMillis()}.jpg")
+            FileOutputStream(tempFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            }
+            val result = Arguments.createMap().apply {
+                putString("uri", "file://${tempFile.absolutePath}")
+                putInt("width", bitmap.width)
+                putInt("height", bitmap.height)
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("SAVE_FAILED", e.message)
         }
     }
 

@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import { ChildProcess } from "child_process";
 import { randomBytes } from "crypto";
+import * as http from "http";
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
@@ -9,6 +10,7 @@ import treeKill from "tree-kill";
 import { CloudflareTunnel } from "../tunnel/cloudflare.js";
 import { findFreePort } from "../utils/ports.js";
 import { startMetro, MetroCommand } from "../utils/metro.js";
+import { createCliToolsMcpServer } from "../server/cliToolsMcp.js";
 import {
   ExpoAirConfig,
   ExtraTunnelConfig,
@@ -90,7 +92,8 @@ export interface DevEnvironmentState {
   widgetDir: string;
   widgetProcess: ChildProcess | null;
   appProcess: ChildProcess | null;
-  promptServer: { start: () => Promise<void>; stop: () => Promise<void>; appendMetroLog: (source: "widget" | "app", content: string) => void } | null;
+  promptServer: { start: () => Promise<void>; stop: () => Promise<void>; appendMetroLog: (source: "widget" | "app", content: string) => void; setMcpServer: (server: any) => void; requestScreenshot: () => Promise<string> } | null;
+  metroExtraEnv: Record<string, string>;
   promptTunnel: CloudflareTunnel | null;
   widgetTunnel: CloudflareTunnel | null;
   appTunnel: CloudflareTunnel | null;
@@ -150,6 +153,7 @@ export class DevEnvironment {
       widgetProcess: null,
       appProcess: null,
       promptServer: null,
+      metroExtraEnv: {},
       promptTunnel: null,
       widgetTunnel: null,
       appTunnel: null,
@@ -252,6 +256,7 @@ export class DevEnvironment {
    * Start Metro bundler servers
    */
   async startMetroServers(extraEnv?: Record<string, string>): Promise<void> {
+    this.state.metroExtraEnv = extraEnv ?? {};
     console.log(chalk.gray("\n  Starting Metro bundlers..."));
 
     // Start widget Metro server if needed
@@ -292,6 +297,7 @@ export class DevEnvironment {
     const { PromptServer } = await import("../server/promptServer.js");
     this.state.promptServer = new PromptServer(this.state.ports.promptServer, this.state.projectRoot, this.state.serverSecret);
     await this.state.promptServer.start();
+    this.attachMcpServer();
     console.log(chalk.green(`  ✓ Prompt server started on port ${this.state.ports.promptServer} (authenticated)`));
 
     // Start watching for changes if in watch mode
@@ -326,6 +332,71 @@ export class DevEnvironment {
         server.appendMetroLog("app", data.toString());
       });
     }
+  }
+
+  /**
+   * Restart the app Metro bundler process
+   */
+  async restartAppMetro(): Promise<string> {
+    // Kill existing app process
+    if (this.state.appProcess?.pid) {
+      await killProcessTree(this.state.appProcess.pid);
+    }
+
+    // Respawn Metro with the same options
+    this.state.appProcess = await startMetro({
+      name: "App",
+      cwd: this.state.projectRoot,
+      port: this.state.ports.appMetro,
+      command: this.options.metroCommand,
+      extraEnv: this.state.metroExtraEnv,
+    });
+
+    // Re-pipe logs to prompt server
+    if (this.state.promptServer && this.state.appProcess) {
+      const server = this.state.promptServer;
+      this.state.appProcess.stdout?.on("data", (data: Buffer) => {
+        server.appendMetroLog("app", data.toString());
+      });
+      this.state.appProcess.stderr?.on("data", (data: Buffer) => {
+        server.appendMetroLog("app", data.toString());
+      });
+    }
+
+    return `Metro bundler restarted on port ${this.state.ports.appMetro}`;
+  }
+
+  /**
+   * Force the app to reload the JS bundle via Metro's /reload endpoint
+   */
+  async forceRefreshApp(): Promise<string> {
+    const port = this.state.ports.appMetro;
+    return new Promise((resolve, reject) => {
+      const req = http.get(`http://localhost:${port}/reload`, (res) => {
+        resolve(`Reload triggered on Metro port ${port} (status ${res.statusCode})`);
+      });
+      req.on("error", (err) => {
+        reject(new Error(`Could not reach Metro on port ${port}: ${err.message}`));
+      });
+      req.setTimeout(5000, () => {
+        req.destroy();
+        reject(new Error(`Reload request to Metro on port ${port} timed out`));
+      });
+    });
+  }
+
+  /**
+   * Create and attach the CLI tools MCP server to the prompt server
+   */
+  private attachMcpServer(): void {
+    if (!this.state.promptServer) return;
+
+    const mcpServer = createCliToolsMcpServer({
+      restartMetro: () => this.restartAppMetro(),
+      forceRefresh: () => this.forceRefreshApp(),
+      screenshotApp: () => this.state.promptServer!.requestScreenshot(),
+    });
+    this.state.promptServer.setMcpServer(mcpServer);
   }
 
   /**
@@ -383,6 +454,7 @@ export class DevEnvironment {
           const newServer = new PromptServer(this.state.ports.promptServer, this.state.projectRoot, this.state.serverSecret);
           await newServer.start();
           this.state.promptServer = newServer;
+          this.attachMcpServer();
 
           console.log(chalk.green(`  ✓ Prompt server restarted successfully`));
         } catch (err) {

@@ -187,6 +187,12 @@ export interface BranchCreatedMessage {
   timestamp: number;
 }
 
+export interface ScreenshotRequestMessage {
+  type: "screenshot_request";
+  requestId: string;
+  timestamp: number;
+}
+
 export interface GitStatusMessage {
   type: "git_status";
   branchName: string;
@@ -212,7 +218,8 @@ export type ServerMessage =
   | AssistantPartsMessage
   | BranchesListMessage
   | BranchSwitchedMessage
-  | BranchCreatedMessage;
+  | BranchCreatedMessage
+  | ScreenshotRequestMessage;
 
 export interface WebSocketClientOptions {
   url: string;
@@ -473,6 +480,30 @@ export class WebSocketClient {
     }
 
     this.ws.send(JSON.stringify({ type: "create_branch", branchName }));
+  }
+
+  async sendScreenshotResponse(requestId: string, imagePath?: string, error?: string): Promise<void> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    const message: Record<string, unknown> = {
+      type: "screenshot_response",
+      requestId,
+    };
+
+    if (error) {
+      message.error = error;
+    } else if (imagePath) {
+      try {
+        const serverPaths = await this.uploadImages([imagePath]);
+        message.imagePaths = serverPaths;
+      } catch (e) {
+        message.error = `Upload failed: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    } else {
+      message.error = "No screenshot captured";
+    }
+
+    this.ws.send(JSON.stringify(message));
   }
 
   isConnected(): boolean {

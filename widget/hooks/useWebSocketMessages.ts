@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { NativeModules } from "react-native";
 import {
   createWebSocketClient,
   getWebSocketClient,
@@ -211,6 +212,21 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
           return [];
         });
         setMessages(historyMessages);
+        break;
+      }
+      case "screenshot_request": {
+        const client = getWebSocketClient();
+        if (!client || !NativeModules.WidgetBridge?.captureAppScreen) {
+          client?.sendScreenshotResponse(message.requestId, undefined, "Screenshot not available on this device");
+          break;
+        }
+        NativeModules.WidgetBridge.captureAppScreen()
+          .then((result: { uri: string }) => {
+            client.sendScreenshotResponse(message.requestId, result.uri);
+          })
+          .catch((err: Error) => {
+            client.sendScreenshotResponse(message.requestId, undefined, err.message);
+          });
         break;
       }
       // Delegate git messages to the git state hook
