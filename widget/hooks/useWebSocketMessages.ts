@@ -25,6 +25,14 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
   const partIdCounter = useRef(0);
   const onGitMessageRef = useRef(onGitMessage);
 
+  const resetState = useCallback(() => {
+    setMessages([]);
+    currentPartsRef.current = [];
+    currentPromptIdRef.current = null;
+    partIdCounter.current = 0;
+    setCurrentParts([]);
+  }, []);
+
   // Keep ref in sync to avoid stale closures
   useEffect(() => {
     onGitMessageRef.current = onGitMessage;
@@ -152,12 +160,7 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
         }
         break;
       case "session_cleared":
-        // Clear all messages for new session
-        setMessages([]);
-        currentPartsRef.current = [];
-        currentPromptIdRef.current = null;
-        partIdCounter.current = 0;
-        setCurrentParts([]);
+        resetState();
         break;
       case "stopped":
         // Preserve partial work when stopped
@@ -242,6 +245,9 @@ export function useWebSocketMessages({ serverUrl, onGitMessage }: UseWebSocketMe
   // Initialize WebSocket connection immediately (even when collapsed)
   // so it's already connected when user expands the widget
   useEffect(() => {
+    // Clear stale state from previous app/session
+    resetState();
+
     console.log("[expo-air] Connecting to:", serverUrl?.replace(/([?&])secret=[^&]+/, "$1secret=***"));
     const client = createWebSocketClient({
       url: serverUrl,
