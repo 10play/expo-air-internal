@@ -47,14 +47,19 @@ export class PromptServer {
   private mcpServer: McpSdkServerConfigWithInstance | null = null;
   private screenshotRequests = new Map<string, { resolve: (path: string) => void; reject: (err: Error) => void }>();
 
+  // Metro crash self-healing state
+  private metroCrashFixAttempts = 0;
+  private lastMetroCrashFixTime = 0;
+  private pendingMetroCrashFix: string | null = null;
+  private static readonly MAX_METRO_CRASH_FIX_ATTEMPTS = 2;
+  private static readonly METRO_CRASH_FIX_COOLDOWN_MS = 60_000;
+
   constructor(port: number, projectRoot?: string, secret?: string | null) {
     this.port = port;
     this.projectRoot = projectRoot || process.cwd();
     this.secret = secret ?? null;
     this.git = new GitOperations(this.projectRoot);
     this.metroLogFile = join(this.projectRoot, ".expo-air-metro.log");
-    // Start fresh
-    writeFileSync(this.metroLogFile, "");
     this.loadSession();
   }
 
@@ -337,6 +342,70 @@ export class PromptServer {
     this.log(`HMR retrigger: done, re-touched ${touched} files`, "success");
   }
 
+  private handleMetroCrashLoop(errorLines: string): void {
+    const now = Date.now();
+
+    // Cooldown: don't auto-fix more than once per 60s
+    if (now - this.lastMetroCrashFixTime < PromptServer.METRO_CRASH_FIX_COOLDOWN_MS) {
+      this.log("Metro crash fix: skipping (cooldown active)", "info");
+      return;
+    }
+
+    // Max attempts: give up after 2 failed fixes per crash-loop episode
+    if (this.metroCrashFixAttempts >= PromptServer.MAX_METRO_CRASH_FIX_ATTEMPTS) {
+      this.log("Metro crash fix: max attempts reached, notifying client", "error");
+      this.broadcastToClients({
+        type: "error",
+        message: `Metro bundler is crash-looping and auto-fix failed after ${this.metroCrashFixAttempts} attempts. Please check the error logs.`,
+        timestamp: now,
+      });
+      return;
+    }
+
+    // If agent is busy, queue the fix for after the current prompt completes
+    if (this.currentQuery !== null) {
+      this.log("Metro crash fix: agent busy, queuing for after current prompt", "info");
+      this.pendingMetroCrashFix = errorLines;
+      return;
+    }
+
+    this.triggerMetroCrashFix(errorLines);
+  }
+
+  private triggerMetroCrashFix(errorLines: string): void {
+    this.metroCrashFixAttempts++;
+    this.lastMetroCrashFixTime = Date.now();
+    this.pendingMetroCrashFix = null;
+
+    this.log(`Metro crash fix: auto-sending fix prompt (attempt ${this.metroCrashFixAttempts}/${PromptServer.MAX_METRO_CRASH_FIX_ATTEMPTS})`, "info");
+
+    // Notify connected clients that auto-fix is happening
+    this.broadcastToClients({
+      type: "status",
+      status: "processing",
+      timestamp: Date.now(),
+    });
+
+    const prompt = `URGENT: Metro bundler is crash-looping and cannot start. The watchdog has restarted it multiple times but it keeps crashing immediately.
+
+Read the full Metro log at .expo-air-metro.log for more context, then fix the code causing this crash. Be concise and only fix the issue.
+
+Last error output:
+\`\`\`
+${errorLines}
+\`\`\``;
+
+    const promptId = randomUUID();
+    this.executeWithSDK(promptId, prompt);
+  }
+
+  /** Reset crash-loop fix state (called when Metro recovers or user takes control) */
+  resetMetroCrashFixState(): void {
+    this.metroCrashFixAttempts = 0;
+    this.lastMetroCrashFixTime = 0;
+    this.pendingMetroCrashFix = null;
+  }
+
   private getConfigPath(): string {
     return join(this.projectRoot, ".expo-air.local.json");
   }
@@ -456,6 +525,20 @@ export class PromptServer {
       this.retriggerHMR();
       res.writeHead(200);
       res.end("OK");
+      return;
+    }
+
+    if (reqUrl.pathname === "/metro-crash" && req.method === "POST") {
+      // Receive crash-loop notification from watchdog with error lines in body
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        const errorLines = Buffer.concat(chunks).toString("utf-8");
+        this.log(`Metro crash-loop reported (${errorLines.split("\n").length} lines)`, "error");
+        this.handleMetroCrashLoop(errorLines);
+        res.writeHead(200);
+        res.end("OK");
+      });
       return;
     }
 
@@ -785,6 +868,12 @@ export class PromptServer {
         "prompt"
       );
 
+      // User takes control — clear any pending auto-fix
+      if (this.pendingMetroCrashFix) {
+        this.log("Metro crash fix: cleared pending auto-fix (user sent prompt)", "info");
+        this.pendingMetroCrashFix = null;
+      }
+
       // Persist images to stable location and track paths
       let persistedImagePaths: string[] | undefined;
       if (message.imagePaths && message.imagePaths.length > 0) {
@@ -1039,7 +1128,14 @@ IMPORTANT CONSTRAINTS:
 METRO BUNDLER LOGS:
 - Recent Metro bundler logs are written to .expo-air-metro.log in the project root
 - Use the Read tool to view this file when diagnosing build errors, bundle failures, or runtime issues
-- The file is cleared periodically so it only contains recent output`,
+- The file is rotated periodically so it only contains recent output
+
+RESTARTING METRO:
+- Metro is managed by a watchdog that auto-restarts it on crash
+- To intentionally restart Metro (e.g. after adding a package with "bun add"), run:
+  source /app/watchdog-lib.sh && watchdog_restart metro
+- This signals the watchdog to restart immediately without triggering crash-loop detection
+- Do NOT restart Metro unless necessary (e.g. after adding a new package)`,
           },
           tools: {
             type: "preset",
@@ -1233,6 +1329,14 @@ METRO BUNDLER LOGS:
         status: "idle",
         timestamp: Date.now(),
       });
+
+      // Check for pending Metro crash fix queued while agent was busy
+      if (this.pendingMetroCrashFix) {
+        const errorLines = this.pendingMetroCrashFix;
+        this.log("Metro crash fix: processing queued crash-loop fix", "info");
+        // Delay slightly to let the idle status propagate to clients
+        setTimeout(() => this.triggerMetroCrashFix(errorLines), 1000);
+      }
     }
   }
 
@@ -1256,10 +1360,20 @@ METRO BUNDLER LOGS:
     appendFileSync(this.metroLogFile, formatted);
     this.metroLogLineCount += lines.length;
 
-    // Clear file when it exceeds max lines
+    // Rotate: keep the most recent lines, remove older ones
     if (this.metroLogLineCount >= PromptServer.MAX_METRO_LOG_LINES) {
-      writeFileSync(this.metroLogFile, "");
-      this.metroLogLineCount = 0;
+      try {
+        const keepLines = Math.floor(PromptServer.MAX_METRO_LOG_LINES / 2);
+        const current = readFileSync(this.metroLogFile, "utf-8");
+        const allLines = current.split("\n");
+        const trimmed = allLines.slice(-keepLines).join("\n");
+        writeFileSync(this.metroLogFile, trimmed);
+        this.metroLogLineCount = keepLines;
+      } catch {
+        // Fallback: clear file if rotation fails
+        writeFileSync(this.metroLogFile, "");
+        this.metroLogLineCount = 0;
+      }
     }
   }
 

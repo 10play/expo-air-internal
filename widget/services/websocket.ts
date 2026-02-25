@@ -243,7 +243,7 @@ export class WebSocketClient {
   constructor(options: WebSocketClientOptions) {
     this.options = {
       reconnectInterval: 3000,
-      maxReconnectAttempts: 10,
+      maxReconnectAttempts: 50,
       onConnect: () => {},
       onDisconnect: () => {},
       onMessage: () => {},
