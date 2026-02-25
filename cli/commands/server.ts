@@ -95,6 +95,8 @@ export async function serverCommand(options: ServerOptions): Promise<void> {
 
   // When --pipe-metro is set, read Metro output from stdin and pipe through
   // appendMetroLog so the agent can read logs with proper rotation.
+  // (Used for local dev. In cloud, the watchdog writes Metro logs directly
+  // to .expo-air-metro.log and the agent reads that file.)
   if (options.pipeMetro) {
     console.log(chalk.gray("  Piping stdin → Metro logs (.expo-air-metro.log)\n"));
     process.stdin.setEncoding("utf-8");
